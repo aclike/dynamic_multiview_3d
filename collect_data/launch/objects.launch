@@ -1,0 +1,3 @@
+<launch>
+    <node pkg="reconst" type="manage_objects.py" name="manage_objects" output="screen" />
+</launch>

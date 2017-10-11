@@ -103,3 +103,6 @@ ENV/
 data/
 samples/
 snapshots/
+
+.idea/
+*.pyc
