@@ -1,0 +1,8 @@
+# request
+string model_name
+float32 r
+float32 p
+float32 y
+---
+# response
+bool success
