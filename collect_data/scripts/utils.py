@@ -12,17 +12,17 @@ def make_dir(path):
     os.makedirs(real_path)
   return real_path
 
-def service_handler(handler, service_class=std_srv.TriggerResponse, *args, **kwargs):
+def service_handler(handler, parse_req=lambda x: x):
   def handler_func(req):
     success = False
     try:
-      handler(*args, **kwargs)
+      handler(**parse_req(req))
       success = True
     except Exception as e:
       rospy.logerr('Service handling failed! Exception: %s' %
                    traceback.format_exception_only(e.__class__, e)[0])
       traceback.print_exc()
-    return service_class(success=success)
+    return success
   return handler_func
 
 def persistent_service_proxy(topic, service, pool):

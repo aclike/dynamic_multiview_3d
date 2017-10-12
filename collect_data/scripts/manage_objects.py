@@ -33,7 +33,7 @@ class ObjectManager(object):
     init_models = {
       'distorted_camera': {
         'model_sdf_file': '/home/owen/.gazebo/models/distorted_camera/model.sdf',
-        'position': [0, 0, 1.0],
+        'position': [-3.50, 0, 0.85],
         'orientation': {'w': 1, 'x': 0, 'y': 0, 'z': 0},
       },
     }
@@ -42,10 +42,30 @@ class ObjectManager(object):
                         model_info['position'], model_info['orientation'])
 
     # Define services
+    def parse_spawn_object_req(req):
+      return {
+        'model_name': req.model_name,
+        'model_sdf_file': req.model_sdf_file,
+        'pos_x': req.pos_x,
+        'pos_y': req.pos_y,
+        'pos_z': req.pos_z,
+        'rot_w': req.rot_w,
+        'rot_x': req.rot_x,
+        'rot_y': req.rot_y,
+        'rot_z': req.rot_z,
+      }
     rospy.Service('/manage_objects/spawn_object', collect_srv.SpawnObject,
-                  utils.service_handler(self.spawn_object_wrapper))
-    rospy.Service('/manage_objects/set_object_rotation', collect_srv.SpawnObject,
-                  utils.service_handler(self.set_object_rotation_wrapper))
+                  utils.service_handler(self.spawn_object_wrapper, parse_spawn_object_req))
+
+    def parse_set_object_rotation_req(req):
+      return {
+        'model_name': req.model_name,
+        'r': req.r,
+        'p': req.p,
+        'y': req.y,
+      }
+    rospy.Service('/manage_objects/set_object_rotation', collect_srv.SetObjectRotation,
+                  utils.service_handler(self.set_object_rotation_wrapper, parse_set_object_rotation_req))
 
   def spawn_object_wrapper(self, model_name, model_sdf_file,
                            pos_x, pos_y, pos_z, rot_w, rot_x, rot_y, rot_z):
