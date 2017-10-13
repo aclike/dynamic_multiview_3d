@@ -1,7 +1,9 @@
 import rospy
 import roslib
 roslib.load_manifest('collect_data')
-import std_srvs.srv as std_srv
+import cv2
+from cv_bridge import CvBridge, CvBridgeError
+import numpy as np
 
 import os
 import traceback
@@ -41,3 +43,15 @@ def persistent_service_proxy(topic, service, pool):
   assert topic not in pool, 'already exists'
   create_proxy()
   return service_caller
+
+def from_sensor_msgs_img(img):
+  """Converts sensor_msgs/Image representation into a NumPy array.
+  We will assume an RGB image.
+  """
+  bridge = CvBridge()
+  img.step = img.width * 3
+  try:
+    cv_img = bridge.imgmsg_to_cv2(img, 'rgb8')
+  except CvBridgeError as e:
+    print(e); return
+  return np.asarray(cv_img).astype(np.float32)
