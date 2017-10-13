@@ -59,35 +59,45 @@ class DataCollector(object):
       if model_name.startswith(synset_name):
         # Set initial properties
         model_sdf_file = MODEL_SDF_BASE.format(model_name)
-        pos = [0, 0, 0]  # (x, y, z)
-        orientation = [1, 0, 0, 0]  # (w, x, y, z)
+        pos = [0, 0, 5]  # (x, y, z)
+        base_orientation = [1, 0, 0, 0]  # (w, x, y, z)
+        orientation, rotation = base_orientation, [0, 0, 0]
+
+        """
+        (?)
+        Elevation - rotation around y-axis
+        Azimuth - rotation around z-axis
+
+        * 360 deg = 6.28 rad
+        """
 
         # Run through a series of orientations, saving an image for each
         imgs = []
-        rotation = (0, 0, 0.3)  # constant rotation for now (TODO sample?)
         for i in range(num_images):
           # Spawn the object
           self._call_spawn_object(model_name, model_sdf_file, *(pos + orientation))
-          rospy.sleep(0.11)
+          rospy.sleep(0.1)
           if pkl:
-            imgs.append({'img': self.latest_img, 'orientation': orientation})
+            imgs.append({'img': self.latest_img, 'orientation': orientation, 'rotation': rotation})
           else:
-            self.save_as_img(model_name, self.latest_img, orientation, outfolder)
+            self.save_as_img(model_name, self.latest_img, rotation, outfolder)
           img_count += 1
 
           # Delete the object
           self._call_delete_model(model_name=model_name)
-          rospy.sleep(0.11)
 
           # Define next orientation
-          orientation = self.rotated(orientation, rotation)
+          rotation = [0] + (np.random.rand(2) * 6.28).tolist()
+          orientation = self.rotated(base_orientation, rotation)
 
         all_imgs[model_name] = imgs
     if pkl:
       with open(os.path.join(outfolder, '%s.pkl' % synset_name), 'wb') as f:
         pickle.dump(all_imgs, f)
-    print('[o] time elapsed: %s seconds' % (time.time() - start_time))
-    print('[o] images collected: %d' % img_count)
+    time_elapsed_s = time.time() - start_time
+    print('[o] time elapsed: %s seconds' % time_elapsed_s)
+    print('[o] images collected: %d (avg %.2f s / img)' %
+          (img_count, float(time_elapsed_s) / img_count))
 
   def make_orientations(self):
     """
@@ -109,16 +119,16 @@ class DataCollector(object):
       curr_orientation[1:] + curr_orientation[:1]))
     return list(rotated[-1:]) + list(rotated[:-1])
 
-  def save_as_img(self, model_name, img, orientation, outfolder):
+  def save_as_img(self, model_name, img, rotation, outfolder):
     bridge = CvBridge()
     img.step = img.width * 3
     try:
       cv_img = bridge.imgmsg_to_cv2(img, 'rgb8')
     except CvBridgeError as e:
-      print(e)
+      print(e); return
     img = np.asarray(cv_img).astype(np.float32)
-    _orientation = [float('%.2f' % c) for c in orientation]
-    outpath = os.path.join(outfolder, '%s_%s.png' % (model_name, str(_orientation)))
+    outpath = os.path.join(outfolder, '%s_%.1f_%.1f.png' %
+                           (model_name, rotation[1], rotation[2]))
     cv2.imwrite(outpath, cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
 
 if __name__ == '__main__':
@@ -128,6 +138,9 @@ if __name__ == '__main__':
   parser.add_argument('outfolder', type=str)
   parser.add_argument('--pkl', action='store_true')
   args = parser.parse_args()
+
+  if not os.path.exists(args.outfolder):
+    os.makedirs(args.outfolder)
 
   # Run data collection
   collector = DataCollector()
