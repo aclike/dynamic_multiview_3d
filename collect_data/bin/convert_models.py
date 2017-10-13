@@ -3,6 +3,11 @@ convert_models.py
 
 Converts ShapeNet models from a given directory
 into Gazebo models in another given directory.
+
+Usage:
+  convert_models.py <synset_name> <shapenet_dir> <gazebo_dir>
+e.g.
+  convert_models.py house /home/owen/Downloads/ShapeNetCore.v2/02843684 /home/owen/.gazebo/models
 """
 
 import argparse

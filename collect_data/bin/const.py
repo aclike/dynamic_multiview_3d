@@ -15,7 +15,9 @@ MODEL_CONFIG_CONTENT = '<?xml version="1.0" ?>\n\n' \
 MODEL_SDF_CONTENT = '<?xml version="1.0" ?>\n' \
                     '<sdf version="1.5">\n' \
                     '\t<model name="{}">\n' \
+                    '\t\t<static>true</static>\n' \
                     '\t\t<link name="link">\n' \
+                    '\t\t\t<gravity>0</gravity>\n' \
                     '\t\t\t<inertial>\n' \
                     '\t\t\t\t<pose>{} {} {} {} {} {}</pose>\n' \
                     '\t\t\t\t<inertia>\n' \

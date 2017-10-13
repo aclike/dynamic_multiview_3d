@@ -33,7 +33,7 @@ class ObjectManager(object):
     init_models = {
       'distorted_camera': {
         'model_sdf_file': '/home/owen/.gazebo/models/distorted_camera/model.sdf',
-        'position': [-3.50, 0, 0.85],
+        'position': [-2.05, 0, 0.30],
         'orientation': {'w': 1, 'x': 0, 'y': 0, 'z': 0},
       },
     }
@@ -57,15 +57,26 @@ class ObjectManager(object):
     rospy.Service('/manage_objects/spawn_object', collect_srv.SpawnObject,
                   utils.service_handler(self.spawn_object_wrapper, parse_spawn_object_req))
 
-    def parse_set_object_rotation_req(req):
+    def parse_rotate_object_req(req):
       return {
         'model_name': req.model_name,
         'r': req.r,
         'p': req.p,
         'y': req.y,
       }
-    rospy.Service('/manage_objects/set_object_rotation', collect_srv.SetObjectRotation,
-                  utils.service_handler(self.set_object_rotation_wrapper, parse_set_object_rotation_req))
+    rospy.Service('/manage_objects/rotate_object', collect_srv.RotateObject,
+                  utils.service_handler(self.rotate_object_wrapper, parse_rotate_object_req))
+
+    def parse_set_orientation_req(req):
+      return {
+        'model_name': req.model_name,
+        'w': req.w,
+        'x': req.x,
+        'y': req.y,
+        'z': req.z,
+      }
+    rospy.Service('/manage_objects/set_orientation', collect_srv.SetOrientation,
+                  utils.service_handler(self.set_orientation, parse_set_orientation_req))
 
   def spawn_object_wrapper(self, model_name, model_sdf_file,
                            pos_x, pos_y, pos_z, rot_w, rot_x, rot_y, rot_z):
@@ -91,16 +102,16 @@ class ObjectManager(object):
     )
     self.active_models.append(model_name)
 
-  def set_object_rotation_wrapper(self, model_name, r, p, y):
-    self.set_object_rotation(model_name, (r, p, y,))
+  def rotate_object_wrapper(self, model_name, r, p, y):
+    self.rotate_object(model_name, (r, p, y,))
     return True
 
-  def set_object_rotation(self, model_name, rotation):
+  def rotate_object(self, model_name, rotation):
     """
     MODEL_NAME - a string representing the name of the object to rotate
     ROTATION - a 3-tuple containing RPY angles
     """
-    model_state_raw = self._call_get_model_state(model_name, 'base_footprint')
+    model_state_raw = self._call_get_model_state(model_name=model_name)
     model_state = gazebo_msg.ModelState()
     model_state.model_name = model_name
     model_state.pose = model_state_raw.pose
@@ -116,6 +127,14 @@ class ObjectManager(object):
 
     model_state.pose.orientation = geometry_msg.Quaternion(*rotated)
     self._call_set_model_state(model_state=model_state)
+
+  def set_orientation(self, model_name, w, x, y, z):
+    model_state_raw = self._call_get_model_state(model_name=model_name)
+    model_state = gazebo_msg.ModelState(
+      model_name=model_name, pose=model_state_raw.pose, twist=model_state_raw.twist)
+    model_state.pose.orientation = geometry_msg.Quaternion(x, y, z, w)
+    self._call_set_model_state(model_state=model_state)
+    return True
 
   def listen(self):
     try:
