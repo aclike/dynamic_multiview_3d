@@ -16,7 +16,6 @@ except ValueError:
   sys.path.append('/home/owen/ros/dynamic_multiview_3d/collect_data/scripts')
   import utils
 import subprocess
-from convert_models import generate_gazebo_model_structure
 import re
 
 BOUNDS_PATTERN = r'[\s\S]*Bounds: <<(.*), (.*), (.*)>, <(.*), (.*), ' \
@@ -24,6 +23,14 @@ BOUNDS_PATTERN = r'[\s\S]*Bounds: <<(.*), (.*), (.*)>, <(.*), (.*), ' \
 CENTER_PATTERN = r'[\s\S]*Center: <(.*), (.*), (.*)>[\s\S]*'
 FPOINT_PATTERN = r'[\s\S]*Point farthest from center: <(.*), (.*), (.*)> ' \
                  r'at distance of (.*)[\s\S]*'
+
+def define_scale(meshtool_output):
+  """Given some information about the model bounds,
+  returns an appropriate (x, y, z) scale for the object.
+  """
+  _, _, fpoint = extract_bounds_info(meshtool_output)
+  fdist = fpoint[-1]  # maximal distance from the center
+  return (1.0 / fdist + 1e-9,) * 3
 
 def extract_bounds_info(meshtool_output):
   bounds_match = re.match(BOUNDS_PATTERN, meshtool_output)

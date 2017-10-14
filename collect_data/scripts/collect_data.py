@@ -26,7 +26,6 @@ import argparse
 import utils
 import pickle
 import cv2
-from cv_bridge import CvBridge, CvBridgeError
 import numpy as np
 import tf as xf
 import time
@@ -54,12 +53,15 @@ class DataCollector(object):
     self._call_delete_model = utils.persistent_service_proxy(
       'gazebo/delete_model', gazebo_srv.DeleteModel, self._service_proxies)
 
-    self.latest_img = None
+    self.latest_img, self.latest_depth = None, None
     def img_callback(msg):
       self.latest_img = msg
     rospy.Subscriber('/distorted_camera/distorted_camera/image_raw', sensor_msg.Image, img_callback)
+    def depth_callback(msg):
+      self.latest_depth = msg
+    rospy.Subscriber('/distorted_camera/distorted_camera/depth/image_raw', sensor_msg.Image, depth_callback)
 
-  def collect_data(self, synset_name, num_images=5, outfolder='.', pkl=False, tfr=False):
+  def collect_data(self, synset_name, num_images=5, outfolder='.', pkl=False, tfr=False, save_depth=False):
     writer = None
     if tfr:
       writer = tf.python_io.TFRecordWriter(os.path.join(outfolder, '%s.tfrecords' % synset_name))
@@ -86,15 +88,22 @@ class DataCollector(object):
           # Spawn the object
           self._call_spawn_object(model_name, model_sdf_file, *(pos + orientation))
           rospy.sleep(0.1)
-          img = self.latest_img
+          img, depth = self.latest_img, self.latest_depth
           if pkl:
-            imgs.append({'img': img, 'orientation': orientation, 'rotation': rotation})
+            _info = {'img': img, 'orientation': orientation, 'rotation': rotation}
+            if save_depth:
+              _info.update({'depth': depth})
+            imgs.append(_info)
           else:
             self.save_as_img(model_name, img, rotation, outfolder)
+            if save_depth:
+              self.save_as_img(model_name, depth, rotation, outfolder, depth=True)
           if tfr:
             _img_np = utils.from_sensor_msgs_img(img)
+            _depth_np = utils.from_sensor_msgs_img(depth)
             example = tf.train.Example(features=tf.train.Features(feature={
               'image': _bytes_feature(tf.compat.as_bytes(_img_np.tostring())),
+              'depth': _bytes_feature(tf.compat_as_bytes(_depth_np.tostring())),
               'elevation': _float_feature(rotation[1]),
               'azimuth': _float_feature(rotation[2]),
             }))
@@ -131,11 +140,14 @@ class DataCollector(object):
       curr_orientation[1:] + curr_orientation[:1]))
     return list(rotated[-1:]) + list(rotated[:-1])
 
-  def save_as_img(self, model_name, img, rotation, outfolder):
-    img = utils.from_sensor_msgs_img(img)
-    outpath = os.path.join(outfolder, '%s_%.1f_%.1f.png' %
-                           (model_name, rotation[1], rotation[2]))
-    cv2.imwrite(outpath, cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+  def save_as_img(self, model_name, img, rotation, outfolder, depth=False):
+    img = utils.from_sensor_msgs_img(img, depth)
+    outpath = os.path.join(outfolder, '%s%s_%.1f_%.1f.png' %
+                           ('depth_' if depth else '', model_name, rotation[1], rotation[2]))
+    if depth:
+      cv2.imwrite(outpath, img)
+    else:
+      cv2.imwrite(outpath, cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
@@ -144,6 +156,7 @@ if __name__ == '__main__':
   parser.add_argument('outfolder', type=str)
   parser.add_argument('--pkl', action='store_true')
   parser.add_argument('--tfr', action='store_true')
+  parser.add_argument('--save_depth', action='store_true')
   args = parser.parse_args()
 
   if not os.path.exists(args.outfolder):

@@ -18,10 +18,11 @@ except ValueError:
   sys.path.append('/home/owen/ros/dynamic_multiview_3d/collect_data/scripts')
   import utils
 import const
-from subprocess import call
+from subprocess import call, check_output
 import shutil
+from resize_models import define_scale
 
-def generate_gazebo_model_structure(gazebo_dir, model_name):
+def generate_gazebo_model_structure(gazebo_dir, model_name, meshtool_output):
   utils.make_dir(os.path.join(gazebo_dir, model_name, 'meshes'))
   utils.make_dir(os.path.join(gazebo_dir, model_name, 'images'))
   with open(os.path.join(gazebo_dir, model_name, 'model.config'), 'w') as f:
@@ -32,7 +33,7 @@ def generate_gazebo_model_structure(gazebo_dir, model_name):
     vp0, vp1, vp2, vp3, vp4, vp5 = 0, 0, 0, 1.5, 0, 0
     ixx, iyy, izz = 0.013, 0.011, 0.0037
     mass, max_vel, min_depth = 1.0, 0.1, 0.001
-    scale0, scale1, scale2 = 1.0, 1.0, 1.0
+    scale0, scale1, scale2 = define_scale(meshtool_output)
     uri = 'model://%s/meshes/model.dae' % model_name
     f.write(const.MODEL_SDF_CONTENT.format(
       model_name, ip0, ip1, ip2, ip3, ip4, ip5, ixx, iyy, izz, mass, cp0, cp1,
@@ -46,8 +47,13 @@ def main(synset_name, shapenet_dir, gazebo_dir):
     if not os.path.isdir(dirpath) or 'models' not in set(os.listdir(dirpath)):
       continue
     model_name = synset_name + str(i)
-    generate_gazebo_model_structure(gazebo_dir, model_name)
     shapenet_model_path = os.path.join(dirpath, 'models', 'model_normalized.obj')
+    meshtool_output = check_output([
+      'meshtool',
+      '--load_obj', shapenet_model_path,
+      '--print_bounds'
+    ])
+    generate_gazebo_model_structure(gazebo_dir, model_name, meshtool_output)
     dae_model_path = os.path.join(gazebo_dir, model_name, 'meshes', 'model.dae')
     call([
       'meshtool',
