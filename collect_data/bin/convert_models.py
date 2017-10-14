@@ -7,7 +7,7 @@ into Gazebo models in another given directory.
 Usage:
   convert_models.py <synset_name> <shapenet_dir> <gazebo_dir>
 e.g.
-  convert_models.py house /home/owen/Downloads/ShapeNetCore.v2/02843684 /home/owen/.gazebo/models
+  convert_models.py house ~/Downloads/ShapeNetCore.v2/02843684 ~/.gazebo/models
 """
 
 import argparse
@@ -19,9 +19,11 @@ except ValueError:
   import utils
 import const
 from subprocess import call
+import shutil
 
 def generate_gazebo_model_structure(gazebo_dir, model_name):
   utils.make_dir(os.path.join(gazebo_dir, model_name, 'meshes'))
+  utils.make_dir(os.path.join(gazebo_dir, model_name, 'images'))
   with open(os.path.join(gazebo_dir, model_name, 'model.config'), 'w') as f:
     f.write(const.MODEL_CONFIG_CONTENT.format(model_name).replace('\t', '  '))
   with open(os.path.join(gazebo_dir, model_name, 'model.sdf'), 'w') as f:
@@ -43,9 +45,6 @@ def main(synset_name, shapenet_dir, gazebo_dir):
     dirpath = os.path.join(shapenet_dir, dirname)
     if not os.path.isdir(dirpath) or 'models' not in set(os.listdir(dirpath)):
       continue
-    if 'images' in set(os.listdir(dirpath)):
-      print('Omitting %s because it requires images.' % dirpath)
-      continue
     model_name = synset_name + str(i)
     generate_gazebo_model_structure(gazebo_dir, model_name)
     shapenet_model_path = os.path.join(dirpath, 'models', 'model_normalized.obj')
@@ -55,6 +54,15 @@ def main(synset_name, shapenet_dir, gazebo_dir):
       '--load_obj', shapenet_model_path,
       '--save_collada', dae_model_path,
     ])
+    if 'images' in set(os.listdir(dirpath)):
+      for filename in os.listdir(os.path.join(dirpath, 'images')):
+        shutil.copy2(os.path.join(dirpath, 'images', filename), os.path.join(gazebo_dir, model_name, 'images'))
+      # Fix path references in DAE file
+      with open(dae_model_path, 'r+') as f:
+        dae_content = f.read()
+        f.seek(0)
+        f.write(dae_content.replace('./images', '../images/'))
+        f.truncate()
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
