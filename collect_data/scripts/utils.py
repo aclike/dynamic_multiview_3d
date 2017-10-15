@@ -45,11 +45,10 @@ def persistent_service_proxy(topic, service, pool):
   return service_caller
 
 def from_sensor_msgs_img(img, depth=False):
-  """Converts sensor_msgs/Image representation into a NumPy array.
-  """
+  """Converts sensor_msgs/Image representation into a NumPy array."""
   bridge = CvBridge()
   if depth:
-    return np.asarray(bridge.imgmsg_to_cv2(img, encoding=img.encoding))
+    return np.asarray(bridge.imgmsg_to_cv2(img))
   else:
     img.step = img.width * 3
     try:

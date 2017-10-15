@@ -30,7 +30,7 @@ def define_scale(meshtool_output):
   """
   _, _, fpoint = extract_bounds_info(meshtool_output)
   fdist = fpoint[-1]  # maximal distance from the center
-  return (1.0 / fdist + 1e-9,) * 3
+  return (0.65 / fdist + 1e-9,) * 3
 
 def extract_bounds_info(meshtool_output):
   bounds_match = re.match(BOUNDS_PATTERN, meshtool_output)

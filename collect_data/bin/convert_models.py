@@ -5,9 +5,9 @@ Converts ShapeNet models from a given directory
 into Gazebo models in another given directory.
 
 Usage:
-  convert_models.py <synset_name> <shapenet_dir> <gazebo_dir>
+  convert_models.py <synset_name> <shapenet_dir> <gazebo_dir> [--force]
 e.g.
-  convert_models.py house ~/Downloads/ShapeNetCore.v2/02843684 ~/.gazebo/models
+  convert_models.py house ~/Downloads/ShapeNetCore.v2/02843684 ~/.gazebo/models --force
 """
 
 import argparse
@@ -41,7 +41,7 @@ def generate_gazebo_model_structure(gazebo_dir, model_name, meshtool_output):
       uri, scale0, scale1, scale2
     ).replace('\t', '  '))
 
-def main(synset_name, shapenet_dir, gazebo_dir):
+def main(synset_name, shapenet_dir, gazebo_dir, force=False):
   for i, dirname in enumerate(os.listdir(shapenet_dir)):
     dirpath = os.path.join(shapenet_dir, dirname)
     if not os.path.isdir(dirpath) or 'models' not in set(os.listdir(dirpath)):
@@ -55,6 +55,8 @@ def main(synset_name, shapenet_dir, gazebo_dir):
     ])
     generate_gazebo_model_structure(gazebo_dir, model_name, meshtool_output)
     dae_model_path = os.path.join(gazebo_dir, model_name, 'meshes', 'model.dae')
+    if force and os.path.isfile(dae_model_path):
+      os.remove(dae_model_path)
     call([
       'meshtool',
       '--load_obj', shapenet_model_path,
@@ -75,5 +77,6 @@ if __name__ == '__main__':
   parser.add_argument('synset_name', type=str)
   parser.add_argument('shapenet_dir', type=str)
   parser.add_argument('gazebo_dir', type=str)
+  parser.add_argument('--force', action='store_true')
   args = parser.parse_args()
-  main(args.synset_name, args.shapenet_dir, args.gazebo_dir)
+  main(args.synset_name, args.shapenet_dir, args.gazebo_dir, args.force)

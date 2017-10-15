@@ -7,9 +7,9 @@ Loads synsets of objects in Gazebo. For each object, runs through multiple
 orientations in front of the camera and saves an image of each one.
 
 Usage:
-  collect_data.py <num_images> <synset_name> <outfolder> [--itr] [--tfr]
+  collect_data.py <num_images> <synset_name> <outfolder> [--itr] [--tfr] [--save_depth]
 e.g.
-  collect_data.py house 10 house_dataset --tfr
+  collect_data.py house 10 house_dataset --tfr --save_depth
 """
 
 import rospy
@@ -30,6 +30,8 @@ import numpy as np
 import tf as xf
 import time
 import tensorflow as tf
+from cv_bridge import CvBridge
+import Image
 
 GAZEBO_DIR = '/home/owen/.gazebo/models'
 MODEL_SDF_BASE = '/home/owen/.gazebo/models/{}/model.sdf'
@@ -56,10 +58,10 @@ class DataCollector(object):
     self.latest_img, self.latest_depth = None, None
     def img_callback(msg):
       self.latest_img = msg
-    rospy.Subscriber('/distorted_camera/distorted_camera/image_raw', sensor_msg.Image, img_callback)
+    rospy.Subscriber('/camera/image_raw', sensor_msg.Image, img_callback)
     def depth_callback(msg):
       self.latest_depth = msg
-    rospy.Subscriber('/distorted_camera/distorted_camera/depth/image_raw', sensor_msg.Image, depth_callback)
+    rospy.Subscriber('/camera/depth/image_raw', sensor_msg.Image, depth_callback)
 
   def collect_data(self, synset_name, num_images=5, outfolder='.', pkl=False, tfr=False, save_depth=False):
     writer = None
@@ -95,15 +97,15 @@ class DataCollector(object):
               _info.update({'depth': depth})
             imgs.append(_info)
           else:
-            self.save_as_img(model_name, img, rotation, outfolder)
+            self.save_img(model_name, img, rotation, outfolder)
             if save_depth:
-              self.save_as_img(model_name, depth, rotation, outfolder, depth=True)
+              self.save_img(model_name, depth, rotation, outfolder, depth=True)
           if tfr:
             _img_np = utils.from_sensor_msgs_img(img)
-            _depth_np = utils.from_sensor_msgs_img(depth)
+            _depth_np = utils.from_sensor_msgs_img(depth, depth=True)
             example = tf.train.Example(features=tf.train.Features(feature={
               'image': _bytes_feature(tf.compat.as_bytes(_img_np.tostring())),
-              'depth': _bytes_feature(tf.compat_as_bytes(_depth_np.tostring())),
+              'depth': _bytes_feature(tf.compat.as_bytes(_depth_np.tostring())),
               'elevation': _float_feature(rotation[1]),
               'azimuth': _float_feature(rotation[2]),
             }))
@@ -140,13 +142,16 @@ class DataCollector(object):
       curr_orientation[1:] + curr_orientation[:1]))
     return list(rotated[-1:]) + list(rotated[:-1])
 
-  def save_as_img(self, model_name, img, rotation, outfolder, depth=False):
-    img = utils.from_sensor_msgs_img(img, depth)
+  def save_img(self, model_name, img, rotation, outfolder, depth=False):
     outpath = os.path.join(outfolder, '%s%s_%.1f_%.1f.png' %
                            ('depth_' if depth else '', model_name, rotation[1], rotation[2]))
     if depth:
-      cv2.imwrite(outpath, img)
+      _img = np.copy(CvBridge().imgmsg_to_cv2(img))
+      _img[np.isnan(_img)] = 0
+      _img = (255.0 / _img.max() * (_img - _img.min())).astype(np.uint8)
+      Image.fromarray(_img).save(outpath)
     else:
+      img = utils.from_sensor_msgs_img(img, depth=False)
       cv2.imwrite(outpath, cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
 
 if __name__ == '__main__':
@@ -164,4 +169,4 @@ if __name__ == '__main__':
 
   # Run data collection
   collector = DataCollector()
-  collector.collect_data(args.synset_name, args.num_images, args.outfolder, args.pkl, args.tfr)
+  collector.collect_data(args.synset_name, args.num_images, args.outfolder, args.pkl, args.tfr, args.save_depth)

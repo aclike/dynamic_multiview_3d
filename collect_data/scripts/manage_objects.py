@@ -32,7 +32,7 @@ class ObjectManager(object):
     # Spawn the camera and any other initial models
     init_models = {
       'distorted_camera': {
-        'model_sdf_file': '/home/owen/.gazebo/models/distorted_camera/model.sdf',
+        'model_sdf_file': '/home/owen/.gazebo/models/kinect/model.sdf',
         'position': [-1.7, 0, 5.0],
         'orientation': {'w': 1, 'x': 0, 'y': 0, 'z': 0},
       },

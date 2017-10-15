@@ -7,6 +7,11 @@ import os
 from cv_bridge import CvBridge, CvBridgeError
 import numpy as np
 
+def debug(data_filepath, outfolder):
+  with open(data_filepath, 'rb') as f:
+    data = pickle.load(f)
+    import pdb; pdb.set_trace()
+
 def load_data(data_filepath, outfolder):
   with open(data_filepath, 'rb') as f:
     data = pickle.load(f)
@@ -29,6 +34,10 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser()
   parser.add_argument('data_filepath', type=str)
   parser.add_argument('outfolder', type=str)
+  parser.add_argument('--debug', '-d', action='store_true')
   args = parser.parse_args()
 
-  load_data(args.data_filepath, args.outfolder)
+  if args.debug:
+    debug(args.data_filepath, args.outfolder)
+  else:
+    load_data(args.data_filepath, args.outfolder)
