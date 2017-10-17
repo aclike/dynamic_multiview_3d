@@ -33,6 +33,7 @@ import tensorflow as tf
 from cv_bridge import CvBridge
 import Image
 import re
+import sys
 
 GAZEBO_DIR = '/home/owen/.gazebo/models'
 MODEL_SDF_BASE = '/home/owen/.gazebo/models/{}/model.sdf'
@@ -70,7 +71,7 @@ class DataCollector(object):
     rospy.Subscriber('/camera/depth/image_raw', sensor_msg.Image, depth_callback)
 
   def collect_data(self, synset_name, num_images=5, outfolder='.', pkl=False,
-                   tfr=False, save_depth=False, save_rate=None, start_at=0, end_at=float('inf')):
+                   tfr=False, save_depth=False, save_rate=None, start_at=0, end_at=sys.maxint):
     writer = None
     curr_tfr_path = os.path.join(outfolder, '%s_%d.tfrecords' %
                                  (synset_name, start_at // save_rate))
@@ -78,13 +79,12 @@ class DataCollector(object):
       writer = tf.python_io.TFRecordWriter(curr_tfr_path)
     start_time, img_count = time.time(), 0
     all_imgs = {}
-    model_i = 0
     for model_name in _sorted(os.listdir(GAZEBO_DIR), synset_name):
       if model_name.startswith(synset_name):
-        _model_i = int(re.match(r'%s([0-9]+)' % synset_name, model_name).group(1))
-        if _model_i < start_at:
+        model_i = int(re.match(r'%s([0-9]+)' % synset_name, model_name).group(1))
+        if model_i < start_at:
           continue
-        elif _model_i > end_at:
+        elif model_i > end_at:
           break
         # Set initial properties
         model_sdf_file = MODEL_SDF_BASE.format(model_name)
@@ -135,15 +135,19 @@ class DataCollector(object):
           rotation = [0] + [np.random.rand(), np.random.rand() * 6.28]
           orientation = self.rotated(base_orientation, rotation)
 
-        if save_rate and model_i > 0 and model_i % save_rate == 0:
+        """
+        The tfrecords files, in order, will contain indices [0, save_rate - 1],
+        [save_rate, 2 * save_rate - 1], ... and so on so forth.
+        """
+
+        if save_rate and (model_i + 1) % save_rate == 0:
           writer.close()
           print('Wrote tfrecords through model %d to %s.' % (model_i, curr_tfr_path))
           curr_tfr_path = os.path.join(outfolder, '%s_%d.tfrecords' %
-                                       (synset_name, model_i // save_rate))
+                                       (synset_name, (model_i + 1) // save_rate))
           writer = tf.python_io.TFRecordWriter(curr_tfr_path)
 
         all_imgs[model_name] = imgs
-        model_i += 1
     if pkl:
       with open(os.path.join(outfolder, '%s.pkl' % synset_name), 'wb') as f:
         pickle.dump(all_imgs, f)
@@ -187,8 +191,8 @@ if __name__ == '__main__':
   parser.add_argument('--tfr', action='store_true')
   parser.add_argument('--save_depth', action='store_true')
   parser.add_argument('--save_rate', type=int)
-  parser.add_argument('--start_at', type=int)
-  parser.add_argument('--end_at', type=int)
+  parser.add_argument('--start_at', default=0, type=int)
+  parser.add_argument('--end_at', default=sys.maxint, type=int)
   args = parser.parse_args()
 
   if not os.path.exists(args.outfolder):
