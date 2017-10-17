@@ -90,7 +90,8 @@ class DataCollector(object):
         model_sdf_file = MODEL_SDF_BASE.format(model_name)
         pos = [0, 0, 5]  # (x, y, z)
         base_orientation = [1, 0, 0, 0]  # (w, x, y, z)
-        orientation, rotation = base_orientation, [0, 0, 0]
+        rotation = [0] + [np.random.rand(), np.random.rand() * 6.28]
+        orientation = self.rotated(base_orientation, rotation)
 
         """
         Elevation - rotation around y-axis
@@ -104,7 +105,7 @@ class DataCollector(object):
         for i in range(num_images):
           # Spawn the object
           self._call_spawn_object(model_name, model_sdf_file, *(pos + orientation))
-          rospy.sleep(0.8)
+          rospy.sleep(1.1)
           img, depth = self.latest_img, self.latest_depth
           if pkl:
             _info = {'img': img, 'orientation': orientation, 'rotation': rotation}
@@ -129,7 +130,7 @@ class DataCollector(object):
 
           # Delete the object
           self._call_delete_model(model_name=model_name)
-          rospy.sleep(0.8)
+          rospy.sleep(1.1)
 
           # Define next orientation
           rotation = [0] + [np.random.rand(), np.random.rand() * 6.28]
