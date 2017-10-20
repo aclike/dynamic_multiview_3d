@@ -55,4 +55,4 @@ def from_sensor_msgs_img(img, depth=False):
       cv_img = bridge.imgmsg_to_cv2(img, 'rgb8')
     except CvBridgeError as e:
       print(e); return
-    return np.asarray(cv_img).astype(np.float32)
+    return np.asarray(cv_img).astype(np.float32)  ## TODO:shouldn't this be uint8 ?

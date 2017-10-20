@@ -106,3 +106,11 @@ snapshots/
 
 .idea/
 *.pyc
+
+
+srv_gen/
+src/
+*_dataset*
+
+images/
+tfrecords/

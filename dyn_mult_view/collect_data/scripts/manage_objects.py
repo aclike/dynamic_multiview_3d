@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
-import rospy
 import roslib
+import rospy
+
 roslib.load_manifest('collect_data')
 roslib.load_manifest('gazebo_msgs')
 roslib.load_manifest('geometry_msgs')

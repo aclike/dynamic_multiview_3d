@@ -49,6 +49,15 @@ def _sorted(dir_contents, synset_name):
                 key=lambda x: int(re.match(r'%s([0-9]+)' % synset_name, x).group(1))
                     if re.match(r'%s([0-9]+)' % synset_name, x) else -10)
 
+
+
+#TODO: improve lighting
+
+#TODO: for simplicity put azimuth and elevation in a single vector called "displacement"
+#TODO: organize data in tuples of images and displacement vectors (im0, im1, displacement) so that we can use shuffling in the tfrecords reader
+
+# TODO: save images as uint8
+
 class DataCollector(object):
   def __init__(self):
     rospy.init_node('data_collector')
