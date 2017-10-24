@@ -131,8 +131,7 @@ class DataCollector(object):
             example = tf.train.Example(features=tf.train.Features(feature={
               'image': _bytes_feature(tf.compat.as_bytes(_img_np.tostring())),
               'depth': _bytes_feature(tf.compat.as_bytes(_depth_np.tostring())),
-              'elevation': _float_feature(rotation[1]),
-              'azimuth': _float_feature(rotation[2]),
+              'displacement': _float_feature(rotation[1:]),  # (elevation, azimuth)
             }))
             writer.write(example.SerializeToString())
           img_count += 1
