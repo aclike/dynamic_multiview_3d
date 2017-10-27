@@ -37,6 +37,16 @@ class ObjectManager(object):
         'position': [-1.7, 0, 5.0],
         'orientation': {'w': 1, 'x': 0, 'y': 0, 'z': 0},
       },
+      # 'pointlight_above': {
+      #   'model_sdf_file': '/home/owen/.gazebo/models/pointlight_above/model.sdf',
+      #   'position': [0, 0, 6.5],
+      #   'orientation': {'w': 1, 'x': 0, 'y': 0, 'z': 0},
+      # },
+      # 'pointlight_below': {
+      #   'model_sdf_file': '/home/owen/.gazebo/models/pointlight_below/model.sdf',
+      #   'position': [0, 0, 2.0],
+      #   'orientation': {'w': 1, 'x': 0, 'y': 0, 'z': 0},
+      # },
     }
     for model_name, model_info in init_models.items():
       self.spawn_object(model_name, model_info['model_sdf_file'],

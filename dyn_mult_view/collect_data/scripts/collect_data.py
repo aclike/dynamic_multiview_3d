@@ -7,9 +7,9 @@ Loads synsets of objects in Gazebo. For each object, runs through multiple
 orientations in front of the camera and saves an image of each one.
 
 Usage:
-  collect_data.py <num_images> <synset_name> <outfolder> [--pkl] [--tfr] [--save_depth] [--save_rate RATE] [--start_at INDEX] [--end_at INDEX]
+  collect_data.py <num_pairs> <synset_name> <outfolder> [--pkl] [--tfr] [--save_depth] [--save_rate RATE] [--start_at INDEX] [--end_at INDEX] [--save_images]
 e.g.
-  collect_data.py house 10 house_dataset --tfr --save_depth --save_rate 50
+  collect_data.py plane 5 plane_dataset --tfr --save_depth --save_rate 50
 """
 
 import rospy
@@ -20,6 +20,7 @@ roslib.load_manifest('tf')
 import collect_data.srv as collect_srv
 import sensor_msgs.msg as sensor_msg
 import gazebo_msgs.srv as gazebo_srv
+import roslaunch
 
 import os
 import argparse
@@ -34,9 +35,12 @@ from cv_bridge import CvBridge
 import Image
 import re
 import sys
+import warnings
 
 GAZEBO_DIR = '/home/owen/.gazebo/models'
 MODEL_SDF_BASE = '/home/owen/.gazebo/models/{}/model.sdf'
+PLATFORM_LAUNCH = '/home/owen/ros/dynamic_multiview_3d/dyn_mult_view/collect_data/launch/platform.launch'
+GAZEBO_STARTSTOP_FREQ = 70
 
 def _bytes_feature(value):
     return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
@@ -49,19 +53,17 @@ def _sorted(dir_contents, synset_name):
                 key=lambda x: int(re.match(r'%s([0-9]+)' % synset_name, x).group(1))
                     if re.match(r'%s([0-9]+)' % synset_name, x) else -10)
 
-
-
-#TODO: improve lighting
-
-#TODO: for simplicity put azimuth and elevation in a single vector called "displacement"
-#TODO: organize data in tuples of images and displacement vectors (im0, im1, displacement) so that we can use shuffling in the tfrecords reader
-
-# TODO: save images as uint8
+# TODO: improve lighting
+# TODO: organize data in tuples of images and displacement vectors (im0, im1, displacement) so that we can use shuffling in the tfrecords reader
 
 class DataCollector(object):
   def __init__(self):
     rospy.init_node('data_collector')
     rospy.sleep(2)
+
+    self.launch = None
+    self.gazebo_stopped = True
+    self.start_gazebo()
 
     self._service_proxies = {}
     self._call_spawn_object = utils.persistent_service_proxy(
@@ -79,14 +81,30 @@ class DataCollector(object):
       self.latest_depth = msg
     rospy.Subscriber('/camera/depth/image_raw', sensor_msg.Image, depth_callback)
 
-  def collect_data(self, synset_name, num_images=5, outfolder='.', pkl=False,
-                   tfr=False, save_depth=False, save_rate=None, start_at=0, end_at=sys.maxint):
+  def start_gazebo(self):
+    print('Starting Gazebo...')
+    uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
+    roslaunch.configure_logging(uuid)
+    self.launch = roslaunch.parent.ROSLaunchParent(uuid, [PLATFORM_LAUNCH])
+    self.launch.start()
+    self.gazebo_stopped = False
+    rospy.sleep(10)
+
+  def stop_gazebo(self):
+    print('Stopping Gazebo...')
+    self.launch.shutdown()
+    self.gazebo_stopped = True
+    rospy.sleep(10)
+
+  def collect_data(self, synset_name, num_pairs=5, outfolder='.', pkl=False,
+                   tfr=False, save_depth=False, save_rate=None, start_at=0,
+                   end_at=sys.maxint, save_images=False):
     writer = None
     curr_tfr_path = os.path.join(outfolder, '%s_%d.tfrecords' %
                                  (synset_name, start_at // save_rate))
     if tfr:
       writer = tf.python_io.TFRecordWriter(curr_tfr_path)
-    start_time, img_count = time.time(), 0
+    start_time, pair_count = time.time(), 0
     all_imgs = {}
     for model_name in _sorted(os.listdir(GAZEBO_DIR), synset_name):
       if model_name.startswith(synset_name):
@@ -95,6 +113,10 @@ class DataCollector(object):
           continue
         elif model_i > end_at:
           break
+
+        if self.gazebo_stopped:
+          self.start_gazebo()
+
         # Set initial properties
         model_sdf_file = MODEL_SDF_BASE.format(model_name)
         pos = [0, 0, 5]  # (x, y, z)
@@ -111,30 +133,42 @@ class DataCollector(object):
 
         # Run through a series of orientations, saving an image for each
         imgs = []
-        for i in range(num_images):
+        prev_rotation, prev_img, prev_depth = None, None, None
+        for i in range(num_pairs * 2):
           # Spawn the object
           self._call_spawn_object(model_name, model_sdf_file, *(pos + orientation))
           rospy.sleep(1.1)
           img, depth = self.latest_img, self.latest_depth
           if pkl:
+            warnings.warn('pickling is deprecated', DeprecationWarning)
             _info = {'img': img, 'orientation': orientation, 'rotation': rotation}
             if save_depth:
               _info.update({'depth': depth})
             imgs.append(_info)
-          else:
+          if save_images:
             self.save_img(model_name, img, rotation, outfolder)
             if not tfr and save_depth:
               self.save_img(model_name, depth, rotation, outfolder, depth=True)
-          if tfr:
-            _img_np = utils.from_sensor_msgs_img(img)
-            _depth_np = utils.from_sensor_msgs_img(depth, depth=True)
-            example = tf.train.Example(features=tf.train.Features(feature={
-              'image': _bytes_feature(tf.compat.as_bytes(_img_np.tostring())),
-              'depth': _bytes_feature(tf.compat.as_bytes(_depth_np.tostring())),
-              'displacement': _float_feature(rotation[1:]),  # (elevation, azimuth)
-            }))
-            writer.write(example.SerializeToString())
-          img_count += 1
+          if i % 2 == 1:
+            if tfr:
+              _prev_img_np = utils.from_sensor_msgs_img(prev_img)
+              _img_np = utils.from_sensor_msgs_img(img)
+              _img_pair_np = np.array([_prev_img_np, _img_np])
+              _prev_depth_np = utils.from_sensor_msgs_img(prev_depth, depth=True)
+              _depth_np = utils.from_sensor_msgs_img(depth, depth=True)
+              _depth_pair_np = np.array([_prev_depth_np, _depth_np])
+              _displacement_np = np.array(rotation[1:]) - np.array(prev_rotation[1:])
+              example = tf.train.Example(features=tf.train.Features(feature={
+                'image': _bytes_feature(tf.compat.as_bytes(_img_pair_np.tostring())),
+                'depth': _bytes_feature(tf.compat.as_bytes(_depth_pair_np.tostring())),
+                'displacement': _bytes_feature(_displacement_np.tostring()),  # (elevation, azimuth)
+              }))
+              writer.write(example.SerializeToString())
+            pair_count += 1
+
+          prev_img = img
+          prev_depth = depth
+          prev_rotation = rotation
 
           # Delete the object
           self._call_delete_model(model_name=model_name)
@@ -157,6 +191,10 @@ class DataCollector(object):
           writer = tf.python_io.TFRecordWriter(curr_tfr_path)
 
         all_imgs[model_name] = imgs
+
+        if (model_i + 1) % GAZEBO_STARTSTOP_FREQ == 0:
+          self.stop_gazebo()
+
     if pkl:
       with open(os.path.join(outfolder, '%s.pkl' % synset_name), 'wb') as f:
         pickle.dump(all_imgs, f)
@@ -164,8 +202,8 @@ class DataCollector(object):
       writer.close()
     time_elapsed_s = time.time() - start_time
     print('[o] time elapsed: %s seconds' % time_elapsed_s)
-    print('[o] images collected: %d (avg %.2f s / img)' %
-          (img_count, float(time_elapsed_s) / img_count))
+    print('[o] image pairs collected: %d (avg %.2f s / img)' %
+          (pair_count, float(time_elapsed_s) / pair_count))
 
   def rotated(self, curr_orientation, rotation):
     """
@@ -194,7 +232,7 @@ class DataCollector(object):
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
   parser.add_argument('synset_name', type=str)
-  parser.add_argument('num_images', type=int)
+  parser.add_argument('num_pairs', type=int)
   parser.add_argument('outfolder', type=str)
   parser.add_argument('--pkl', action='store_true')
   parser.add_argument('--tfr', action='store_true')
@@ -202,6 +240,7 @@ if __name__ == '__main__':
   parser.add_argument('--save_rate', type=int)
   parser.add_argument('--start_at', default=0, type=int)
   parser.add_argument('--end_at', default=sys.maxint, type=int)
+  parser.add_argument('--save_images', action='store_true')
   args = parser.parse_args()
 
   if not os.path.exists(args.outfolder):
@@ -209,6 +248,6 @@ if __name__ == '__main__':
 
   # Run data collection
   collector = DataCollector()
-  collector.collect_data(args.synset_name, args.num_images, args.outfolder,
+  collector.collect_data(args.synset_name, args.num_pairs, args.outfolder,
                          args.pkl, args.tfr, args.save_depth, args.save_rate,
-                         args.start_at, args.end_at)
+                         args.start_at, args.end_at, args.save_images)
