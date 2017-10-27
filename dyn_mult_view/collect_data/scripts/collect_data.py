@@ -153,14 +153,14 @@ class DataCollector(object):
             if tfr:
               _prev_img_np = utils.from_sensor_msgs_img(prev_img)
               _img_np = utils.from_sensor_msgs_img(img)
-              _img_pair_np = np.array([_prev_img_np, _img_np])
               _prev_depth_np = utils.from_sensor_msgs_img(prev_depth, depth=True)
               _depth_np = utils.from_sensor_msgs_img(depth, depth=True)
-              _depth_pair_np = np.array([_prev_depth_np, _depth_np])
               _displacement_np = np.array(rotation[1:]) - np.array(prev_rotation[1:])
               example = tf.train.Example(features=tf.train.Features(feature={
-                'image': _bytes_feature(tf.compat.as_bytes(_img_pair_np.tostring())),
-                'depth': _bytes_feature(tf.compat.as_bytes(_depth_pair_np.tostring())),
+                'image0': _bytes_feature(tf.compat.as_bytes(_prev_img_np.tostring())),
+                'image1': _bytes_feature(tf.compat.as_bytes(_img_np.tostring())),
+                'depth0': _bytes_feature(tf.compat.as_bytes(_prev_depth_np.tostring())),
+                'depth1': _bytes_feature(tf.compat.as_bytes(_depth_np.tostring())),
                 'displacement': _bytes_feature(_displacement_np.tostring()),  # (elevation, azimuth)
               }))
               writer.write(example.SerializeToString())
