@@ -114,3 +114,6 @@ src/
 
 images/
 tfrecords/
+
+train/
+test/
