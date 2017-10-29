@@ -56,8 +56,8 @@ def build_tfrecord_input(conf, training=True):
     image_name1: tf.FixedLenFeature([1], tf.string),
     depthimage_name0: tf.FixedLenFeature([1], tf.string),
     depthimage_name1: tf.FixedLenFeature([1], tf.string),
-    # displacement_name: tf.FixedLenFeature([1], tf.float32),
-    displacement_name: tf.FixedLenFeature([1], tf.string),
+    displacement_name: tf.FixedLenFeature([2], tf.float32),
+    # displacement_name: tf.FixedLenFeature([1], tf.string),
   }
 
   features = tf.parse_single_example(serialized_example, features=features)

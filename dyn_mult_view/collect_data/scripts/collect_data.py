@@ -40,13 +40,17 @@ import warnings
 GAZEBO_DIR = '/home/owen/.gazebo/models'
 MODEL_SDF_BASE = '/home/owen/.gazebo/models/{}/model.sdf'
 PLATFORM_LAUNCH = '/home/owen/ros/dynamic_multiview_3d/dyn_mult_view/collect_data/launch/platform.launch'
-GAZEBO_STARTSTOP_FREQ = 70
+GAZEBO_STARTSTOP_FREQ = 30
 
 def _bytes_feature(value):
-    return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
+    if not isinstance(value, (np.ndarray, list, tuple)):
+      value = [value]
+    return tf.train.Feature(bytes_list=tf.train.BytesList(value=value))
 
 def _float_feature(value):
-    return tf.train.Feature(float_list=tf.train.FloatList(value=[value]))
+    if not isinstance(value, (np.ndarray, list, tuple)):
+      value = [value]
+    return tf.train.Feature(float_list=tf.train.FloatList(value=value))
 
 def _sorted(dir_contents, synset_name):
   return sorted(dir_contents,
@@ -147,7 +151,7 @@ class DataCollector(object):
             imgs.append(_info)
           if save_images:
             self.save_img(model_name, img, rotation, outfolder)
-            if not tfr and save_depth:
+            if save_depth:
               self.save_img(model_name, depth, rotation, outfolder, depth=True)
           if i % 2 == 1:
             if tfr:
@@ -161,7 +165,7 @@ class DataCollector(object):
                 'image1': _bytes_feature(tf.compat.as_bytes(_img_np.tostring())),
                 'depth0': _bytes_feature(tf.compat.as_bytes(_prev_depth_np.tostring())),
                 'depth1': _bytes_feature(tf.compat.as_bytes(_depth_np.tostring())),
-                'displacement': _bytes_feature(_displacement_np.tostring()),  # (elevation, azimuth)
+                'displacement': _float_feature(_displacement_np),  # (elevation, azimuth)
               }))
               writer.write(example.SerializeToString())
             pair_count += 1

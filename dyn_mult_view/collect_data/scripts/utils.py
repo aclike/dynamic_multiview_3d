@@ -48,11 +48,14 @@ def from_sensor_msgs_img(img, depth=False):
   """Converts sensor_msgs/Image representation into a NumPy array."""
   bridge = CvBridge()
   if depth:
-    return np.asarray(bridge.imgmsg_to_cv2(img))
+    _img = np.copy(bridge.imgmsg_to_cv2(img))
+    _img[np.isnan(_img)] = 0
+    return (255.0 / _img.max() * (_img - _img.min())).astype(np.uint8)
   else:
     img.step = img.width * 3
     try:
       cv_img = bridge.imgmsg_to_cv2(img, 'rgb8')
     except CvBridgeError as e:
-      print(e); return
+      print(e)
+      return
     return np.asarray(cv_img).astype(np.uint8)
