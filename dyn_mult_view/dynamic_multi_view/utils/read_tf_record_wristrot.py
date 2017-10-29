@@ -5,7 +5,7 @@ from tensorflow.python.platform import gfile
 import matplotlib.pyplot as plt
 
 import pdb
-
+import matplotlib.pyplot as plt
 from PIL import Image
 import imp
 
@@ -34,7 +34,7 @@ def build_tfrecord_input(conf, training=True):
   else:
     filenames = filenames[index:]
 
-  if conf['visualize']:
+  if 'test_mode' in conf:
     filenames = gfile.Glob(os.path.join(conf['data_dir'], '*'))
     print 'using input file', filenames
     shuffle = False
@@ -45,20 +45,27 @@ def build_tfrecord_input(conf, training=True):
   reader = tf.TFRecordReader()
   _, serialized_example = reader.read(filename_queue)
 
-  image_name = 'image'
-  depthimage_name = 'depth'
+  image_name0 = 'image0'
+  image_name1 = 'image1'
+  depthimage_name0 = 'depth0'
+  depthimage_name1 = 'depth1'
   displacement_name = 'displacement'
 
   features = {
-    image_name: tf.FixedLenFeature([1], tf.string),
-    depthimage_name: tf.FixedLenFeature([1], tf.string),
-    displacement_name: tf.FixedLenFeature([1], tf.float32),
+    image_name0: tf.FixedLenFeature([1], tf.string),
+    image_name1: tf.FixedLenFeature([1], tf.string),
+    depthimage_name0: tf.FixedLenFeature([1], tf.string),
+    depthimage_name1: tf.FixedLenFeature([1], tf.string),
+    # displacement_name: tf.FixedLenFeature([1], tf.float32),
+    displacement_name: tf.FixedLenFeature([1], tf.string),
   }
 
   features = tf.parse_single_example(serialized_example, features=features)
 
-  image = process_image(features, image_name)
-  depth_image = process_image(features, image_name, depth_image=True)
+  image0 = process_image(features, image_name0)
+  image1 = process_image(features, image_name1)
+  depth_image0 = process_image(features, depthimage_name0, depth_image=True)
+  depth_image1 = process_image(features, depthimage_name1, depth_image=True)
 
   if conf['visualize']:
     num_threads = 1
@@ -66,12 +73,12 @@ def build_tfrecord_input(conf, training=True):
 
   displacement = features[displacement_name]
 
-  [image_batch, depth_image_batch, displacement_batch] = tf.train.batch(
-    [image, depth_image, displacement],
+  [image0_batch, image1_batch, depth_image0_batch, depth_image1_batch, displacement_batch] = tf.train.batch(
+    [image0, image1, depth_image0, depth_image1, displacement],
     conf['batch_size'],
     num_threads=num_threads,
     capacity=100 * conf['batch_size'])
-  return image_batch, depth_image_batch, displacement_batch
+  return image0_batch, image1_batch, depth_image0_batch, depth_image1_batch, displacement_batch
 
 
 def process_image(features, image_name, depth_image=False):
@@ -79,11 +86,15 @@ def process_image(features, image_name, depth_image=False):
     COLOR_CHAN = 1
   else:
     COLOR_CHAN = 3
+      
   ORIGINAL_WIDTH = 128
   ORIGINAL_HEIGHT = 128
-  # can optionally specify smaller image dimensions here:
+
   IMG_WIDTH = 128
   IMG_HEIGHT = 128
+
+  # can optionally specify smaller image dimensions here:
+
   image = tf.decode_raw(features[image_name], tf.uint8)
   image = tf.reshape(image, shape=[1, ORIGINAL_HEIGHT * ORIGINAL_WIDTH * COLOR_CHAN])
   image = tf.reshape(image, shape=[ORIGINAL_HEIGHT, ORIGINAL_WIDTH, COLOR_CHAN])
@@ -97,16 +108,18 @@ def process_image(features, image_name, depth_image=False):
   return image
 
 
-if __name__ == '__main__':
+def main():
   # for debugging only:
   conf = {}
   import dyn_mult_view
-  DATA_DIR = '/'.join(str.split(dyn_mult_view.__file__, '/')[:-2]) + '/trainingdata/plane_dataset/tfrecs/train'
+  DATA_DIR = '/'.join(str.split(dyn_mult_view.__file__, '/')[:-2]) + '/trainingdata/plane_dataset/train'
   conf['schedsamp_k'] = -1  # don't feed ground truth
   conf['data_dir'] = DATA_DIR  # 'directory containing data_files.' ,
   conf['train_val_split'] = 0.95
-  conf['batch_size'] = 10
+  conf['batch_size'] = 64
   conf['visualize'] = False
+
+  conf['test_mode'] = ''
 
   print '-------------------------------------------------------------------'
   print 'verify current settings!! '
@@ -116,21 +129,22 @@ if __name__ == '__main__':
 
   print 'testing the reader'
 
-  image_batch, depth_image_batch, displacement_batch = build_tfrecord_input(conf, training=True)
+  image0_batch, image1_batch, depth_image0_batch, depth_image1_batch, displacement_batch = build_tfrecord_input(conf, training=True)
 
   sess = tf.InteractiveSession()
   tf.train.start_queue_runners(sess)
   sess.run(tf.global_variables_initializer())
 
-  from python_visual_mpc.video_prediction.utils_vpred.create_gif_lib import comp_single_video
 
   for i in range(2):
     print 'run number ', i
 
-    image, depth_image, displacement = sess.run([image_batch, depth_image_batch, displacement_batch])
+    image0, image1, depth_image0, depth_image1, displacement = sess.run([image0_batch, image1_batch, depth_image0_batch, depth_image1_batch, displacement_batch])
 
-    file_path = '/'.join(str.split(DATA_DIR, '/')[:-1] + ['preview'])
-    comp_single_video(file_path, image)
+    image0 = np.squeeze(image0)
+    image1 = np.squeeze(image1)
+    depth_image0 = np.squeeze(depth_image0)
+    depth_image1 = np.squeeze(depth_image1)
 
     # show some frames
     for i in range(10):
@@ -138,11 +152,21 @@ if __name__ == '__main__':
       print 'displacement'
       print displacement[i]
 
-      image = np.squeeze(image)
-      img = np.uint8(255. * image[i, 0])
-      img = Image.fromarray(img, 'RGB')
-      # img.save(file_path,'PNG')
-      img.show()
+      plt.imshow(image0[i])
+      plt.show()
+
+      plt.imshow(depth_image0[i])
+      plt.show()
+
+      plt.imshow(image1[i])
+      plt.show()
+
+      plt.imshow(depth_image1[i])
+      plt.show()
       print i
 
-      pdb.set_trace()
+      # pdb.set_trace()
+
+
+if __name__ == '__main__':
+    main()
