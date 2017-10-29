@@ -12,11 +12,7 @@ e.g.
 
 import argparse
 import os, sys
-try:
-  from ..scripts import utils
-except ValueError:
-  sys.path.append('/home/owen/ros/dynamic_multiview_3d/collect_data/scripts')
-  import utils
+from dyn_mult_view.collect_data.scripts import utils
 import const
 from subprocess import call, check_output
 import shutil
