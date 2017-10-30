@@ -15,6 +15,6 @@ configuration = {
 'current_dir': current_dir,   #'directory for writing summary.' ,
 'num_iterations': 200000,   #'number of training iterations.' ,
 'batch_size':64,
-'learning_rate':1e-3,
+'learning_rate':1e-4,
 'train_val_split':0.95
 }

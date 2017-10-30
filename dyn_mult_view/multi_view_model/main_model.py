@@ -4,7 +4,10 @@ import sys
 
 import dyn_mult_view.mv3d.utils.realtime_renderer as rtr
 from dyn_mult_view.mv3d.utils.tf_utils import *
-from dyn_mult_view.dynamic_multi_view.utils.read_tf_record_wristrot import build_tfrecord_input
+from dyn_mult_view.multi_view_model.utils.read_tf_records import build_tfrecord_input
+
+import pdb
+import matplotlib.pyplot as plt
 
 class Base_Prediction_Model():
   def __init__(self,
@@ -16,19 +19,6 @@ class Base_Prediction_Model():
     self.image_shape = [128, 128, 3]
     self.max_iter = 1000000
     self.start_iter = 0
-
-    self.log_folder = "logs/nobg_nodm"
-    self.train_samples_folder = "samples/nobg_nodm/train"
-    self.test_samples_folder = "samples/nobg_nodm/test"
-    self.snapshots_folder = "snapshots/nobg_nodm"
-
-    self.rend = rtr.RealTimeRenderer(self.batch_size)
-    self.rend.load_model_names("data/cars_training.txt")
-
-    self.test_images1, self.test_images2, \
-    self.test_dm2, self.test_labels = load_test_set(True, False)
-
-
 
     self.train_cond = tf.placeholder(tf.int32, shape=[], name="train_cond")
 
@@ -43,23 +33,28 @@ class Base_Prediction_Model():
                                    [self.batch_size, 2] + self.image_shape,
                                    name='input_images')
 
-      self.labels = tf.placeholder(tf.float32, [self.batch_size, 5],
+      self.disp = tf.placeholder(tf.float32, [self.batch_size, 5],
                                    name='labels')
 
     else:
-      train_image, train_depth_image, train_disp = build_tfrecord_input(conf, training=True)
-      test_image, test_depth_image, test_disp = build_tfrecord_input(conf, training=False)
+      train_image0, train_image1, train_depth_image0, train_depth_image1, train_disp = build_tfrecord_input(conf, training=True)
+      test_image0, test_image1, test_depth_image0, test_depth_image1, test_disp = build_tfrecord_input(conf, training=False)
 
-      self.train_image, self.depth_image, self.disp = tf.cond(self.train_cond > 0,  # if 1 use trainigbatch else validation batch
-                                      lambda: [train_image, train_depth_image, train_disp],
-                                      lambda: [test_image, test_depth_image, test_disp])
+      self.image0, self.image1, self.depth_image0, self.depth_image1, self.disp = tf.cond(self.train_cond > 0,  # if 1 use trainigbatch else validation batch
+                                      lambda: [train_image0, train_image1, train_depth_image0, train_depth_image1, train_disp],
+                                      lambda: [test_image0, test_image1, test_depth_image0, test_depth_image1, test_disp])
+      self.image0 = tf.reshape(self.image0, [conf['batch_size'], 128, 128, 3])
+      self.image1 = tf.reshape(self.image1, [conf['batch_size'], 128, 128, 3])
+      self.depth_image0 = tf.reshape(self.depth_image0, [conf['batch_size'], 128, 128, 1])
+      self.depth_image1 = tf.reshape(self.depth_image1, [conf['batch_size'], 128, 128, 1])
 
     self.buildModel()
+    self.build_loss()
 
   def buildModel(self):
 
-    image0 = self.images[:,0]
-    gtruth_image = self.images[:,1]
+    image0 = self.image0
+    gtruth_image = self.image1
 
     # convolutional encoder
     e0 = lrelu(conv2d_msra(image0, 32, 5, 5, 2, 2, "e0"))
@@ -76,7 +71,7 @@ class Base_Prediction_Model():
     e5 = lrelu(linear_msra(e4r, 4096, "fc1"))
 
     # angle processing
-    a0 = lrelu(linear_msra(self.labels, 64, "a0"))
+    a0 = lrelu(linear_msra(self.disp, 64, "a0"))
     a1 = lrelu(linear_msra(a0, 64, "a1"))
     a2 = lrelu(linear_msra(a1, 64, "a2"))
 
@@ -101,9 +96,9 @@ class Base_Prediction_Model():
     d1 = lrelu(deconv2d_msra(d2_0, [self.batch_size, 64, 64, 32],
                              5, 5, 2, 2, "d1"))
     d1_0 = lrelu(conv2d_msra(d1, 32, 5, 5, 1, 1, "d1_0"))
-    self.gen = tf.nn.tanh(deconv2d_msra(d1_0,
-                                        [self.batch_size, 128, 128, 3],
-                                        5, 5, 2, 2, "d0"))
+
+    self.pre_tanh = deconv2d_msra(d1_0, [self.batch_size, 128, 128, 3], 5, 5, 2, 2, "d0")
+    self.gen = tf.nn.tanh(self.pre_tanh)
 
     self.loss = euclidean_loss(self.gen, gtruth_image)
     self.training_summ = tf.summary.scalar("training_loss", self.loss)
@@ -113,52 +108,50 @@ class Base_Prediction_Model():
 
   def build_loss(self):
 
-    summaries = []
-    self.loss = euclidean_loss(self.gen, self.images2)
-    summaries.append(tf.summary.scalar("training_loss", self.loss))
+    train_summaries = []
+    val_summaries = []
+
+    self.loss = euclidean_loss(self.gen, self.image1)
+    train_summaries.append(tf.summary.scalar("training_loss", self.loss))
+    val_summaries.append(tf.summary.scalar("val_loss", self.loss))
 
     self.train_op = tf.train.AdamOptimizer(self.conf['learning_rate']).minimize(self.loss)
 
-    self.summ_op = tf.summary.merge(summaries)
+    self.train_summ_op = tf.summary.merge(train_summaries)
+    self.val_summ_op = tf.summary.merge(val_summaries)
 
-  def generate_sample_set(self, path, im1, im2, gen, iter_num):
+
+  def visualize(self, sess):
+
+    image0, image1, gen, loss, disp, pre_tanh = sess.run([self.image0, self.image1,
+                                                self.gen, self.loss, self.disp,
+                                                self.pre_tanh],
+                             feed_dict={self.train_cond: 0})
+
+    print 'loss', loss
+    pdb.set_trace()
+
+    print 'input'
+    plt.imshow(image0[0])
+    plt.show()
+    print 'gtruth'
+    plt.imshow(image1[0])
+    plt.show()
+
+    print 'gen_image'
+    plt.imshow(gen[0])
+    plt.show()
+
+
+
+    iter_num = re.match('.*?([0-9]+)$', self.conf['visualize']).group(1)
+
+    path = self.conf['output_dir']
     save_images(gen, [8, 8], path + "/output_%s.png" % (iter_num))
-    save_images(np.array(im2), [8, 8],
+    save_images(np.array(image1), [8, 8],
                 path + '/tr_gt_%s.png' % (iter_num))
-    save_images(np.array(im1), [8, 8],
+    save_images(np.array(image0), [8, 8],
                 path + '/tr_input_%s.png' % (iter_num))
-
-
-  def visualize(self, sess, global_iter):
-    self.test_iter = 19
-    sm_path = os.path.join(self.test_samples_folder,
-                           str(global_iter).zfill(8))
-    if not os.path.exists(sm_path):
-      os.mkdir(sm_path)
-    local_loss = 0.0
-    for i in range(0, self.test_iter):
-      batch_images1 = self.test_images1[i * self.batch_size:
-      (i + 1) * self.batch_size]
-      batch_images2 = self.test_images2[i * self.batch_size:
-      (i + 1) * self.batch_size]
-      batch_labels = self.test_labels[i * self.batch_size:
-      (i + 1) * self.batch_size]
-      output = sess.run([self.gen, self.loss],
-                             feed_dict={
-                               self.images: batch_images1,
-                               self.images2: batch_images2,
-                               self.labels: batch_labels})
-
-      self.generate_sample_set(sm_path, batch_images1,
-                               batch_images2, output[0], i)
-      local_loss += float(output[1])
-
-    total_loss = local_loss / self.test_iter
-    print("[i: %s] [test loss: %.6f]" %
-          (global_iter, total_loss))
-
-    # if self.writer is not None:
-    #   log_value(self.writer, total_loss, 'test_loss', global_iter)
 
 
 global_start_time = time.time()

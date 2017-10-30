@@ -41,6 +41,8 @@ def build_tfrecord_input(conf, training=True):
   else:
     shuffle = True
 
+  print 'shuffle', True
+
   filename_queue = tf.train.string_input_producer(filenames, shuffle=shuffle)
   reader = tf.TFRecordReader()
   _, serialized_example = reader.read(filename_queue)
@@ -67,9 +69,11 @@ def build_tfrecord_input(conf, training=True):
   depth_image0 = process_image(features, depthimage_name0, depth_image=True)
   depth_image1 = process_image(features, depthimage_name1, depth_image=True)
 
-  if conf['visualize']:
+  if 'test_mode' in conf:
     num_threads = 1
   else: num_threads = np.min((conf['batch_size'], 10))
+
+  print 'using {} threads'.format(num_threads)
 
   displacement = features[displacement_name]
 
@@ -119,7 +123,7 @@ def main():
   conf['batch_size'] = 64
   conf['visualize'] = False
 
-  conf['test_mode'] = ''
+  # conf['test_mode'] = ''
 
   print '-------------------------------------------------------------------'
   print 'verify current settings!! '
@@ -136,7 +140,7 @@ def main():
   sess.run(tf.global_variables_initializer())
 
 
-  for i in range(2):
+  for i in range(1):
     print 'run number ', i
 
     image0, image1, depth_image0, depth_image1, displacement = sess.run([image0_batch, image1_batch, depth_image0_batch, depth_image1_batch, displacement_batch])
@@ -147,7 +151,7 @@ def main():
     depth_image1 = np.squeeze(depth_image1)
 
     # show some frames
-    for i in range(10):
+    for i in range(0,63,):
 
       print 'displacement'
       print displacement[i]
@@ -162,6 +166,7 @@ def main():
       plt.show()
 
       plt.imshow(depth_image1[i])
+      # pdb.set_trace()
       plt.show()
       print i
 
