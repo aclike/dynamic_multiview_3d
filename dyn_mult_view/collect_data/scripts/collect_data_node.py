@@ -7,7 +7,7 @@ Loads synsets of objects in Gazebo. For each object, runs through multiple
 orientations in front of the camera and saves an image of each one.
 
 Usage:
-  collect_data.py <num_pairs> <synset_name> <outfolder> [--pkl] [--tfr] [--save_depth] [--save_rate RATE] [--start_at INDEX] [--end_at INDEX] [--save_images]
+  collect_data.py <synset_name>  <num_pairs> <infolder> <outfolder> [--pkl] [--tfr] [--save_depth] [--save_rate RATE] [--start_at INDEX] [--end_at INDEX] [--save_images]
 e.g.
   collect_data.py plane 5 plane_dataset --tfr --save_depth --save_rate 50
 """
@@ -17,7 +17,10 @@ import roslib
 roslib.load_manifest('collect_data')
 roslib.load_manifest('gazebo_msgs')
 roslib.load_manifest('tf')
+
+# from collect_data.srv import RotateObject, SetOrientation, SpawnObject
 import collect_data.srv as collect_srv
+
 import sensor_msgs.msg as sensor_msg
 import gazebo_msgs.srv as gazebo_srv
 import roslaunch
@@ -37,9 +40,8 @@ import re
 import sys
 import warnings
 
-GAZEBO_DIR = '/home/owen/.gazebo/models'
-MODEL_SDF_BASE = '/home/owen/.gazebo/models/{}/model.sdf'
-PLATFORM_LAUNCH = '/home/owen/ros/dynamic_multiview_3d/dyn_mult_view/collect_data/launch/platform.launch'
+import dyn_mult_view
+PLATFORM_LAUNCH = os.path.dirname(dyn_mult_view.__file__) + '/collect_data/launch/platform.launch'
 GAZEBO_STARTSTOP_FREQ = 30
 
 def _bytes_feature(value):
@@ -62,7 +64,7 @@ def _sorted(dir_contents, synset_name):
 
 class DataCollector(object):
   def __init__(self):
-    rospy.init_node('data_collector')
+    rospy.init_node('collect_data_node')
     rospy.sleep(2)
 
     self.launch = None
@@ -100,7 +102,7 @@ class DataCollector(object):
     self.gazebo_stopped = True
     rospy.sleep(10)
 
-  def collect_data(self, synset_name, num_pairs=5, outfolder='.', pkl=False,
+  def collect_data(self, synset_name, num_pairs=5, infolder='.', outfolder='.', pkl=False,
                    tfr=False, save_depth=False, save_rate=None, start_at=0,
                    end_at=sys.maxint, save_images=False):
     writer = None
@@ -110,7 +112,11 @@ class DataCollector(object):
       writer = tf.python_io.TFRecordWriter(curr_tfr_path)
     start_time, pair_count = time.time(), 0
     all_imgs = {}
-    for model_name in _sorted(os.listdir(GAZEBO_DIR), synset_name):
+
+    gazebo_dir = infolder
+    model_sdf_base = os.path.join(gazebo_dir, '/{}/model.sdf')
+
+    for model_name in _sorted(os.listdir(gazebo_dir), synset_name):
       if model_name.startswith(synset_name):
         model_i = int(re.match(r'%s([0-9]+)' % synset_name, model_name).group(1))
         if model_i < start_at:
@@ -121,8 +127,9 @@ class DataCollector(object):
         if self.gazebo_stopped:
           self.start_gazebo()
 
+
         # Set initial properties
-        model_sdf_file = MODEL_SDF_BASE.format(model_name)
+        model_sdf_file = model_sdf_base.format(model_name)
         pos = [0, 0, 5]  # (x, y, z)
         base_orientation = [1, 0, 0, 0]  # (w, x, y, z)
         rotation = [0] + [np.random.rand(), np.random.rand() * 6.28]
@@ -237,6 +244,7 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser()
   parser.add_argument('synset_name', type=str)
   parser.add_argument('num_pairs', type=int)
+  parser.add_argument('infolder', type=str)
   parser.add_argument('outfolder', type=str)
   parser.add_argument('--pkl', action='store_true')
   parser.add_argument('--tfr', action='store_true')
@@ -252,6 +260,6 @@ if __name__ == '__main__':
 
   # Run data collection
   collector = DataCollector()
-  collector.collect_data(args.synset_name, args.num_pairs, args.outfolder,
+  collector.collect_data(args.synset_name, args.num_pairs, args.infolder, args.outfolder,
                          args.pkl, args.tfr, args.save_depth, args.save_rate,
                          args.start_at, args.end_at, args.save_images)
