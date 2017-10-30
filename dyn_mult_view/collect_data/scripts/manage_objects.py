@@ -15,6 +15,9 @@ import collect_data.srv as collect_srv
 import tf
 import numpy as np
 import utils
+import dyn_mult_view
+
+KINECT_SDF_PATH = '/'.join(str.split(dyn_mult_view.__file__, '/')[:-1]) + '/collect_data/models/kinect/model.sdf'
 
 class ObjectManager(object):
   def __init__(self):
@@ -33,7 +36,7 @@ class ObjectManager(object):
     # Spawn the camera and any other initial models
     init_models = {
       'distorted_camera': {
-        'model_sdf_file': '/home/owen/.gazebo/models/kinect/model.sdf',
+        'model_sdf_file': KINECT_SDF_PATH,
         'position': [-1.7, 0, 5.0],
         'orientation': {'w': 1, 'x': 0, 'y': 0, 'z': 0},
       },
