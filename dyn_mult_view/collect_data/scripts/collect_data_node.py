@@ -7,9 +7,9 @@ Loads synsets of objects in Gazebo. For each object, runs through multiple
 orientations in front of the camera and saves an image of each one.
 
 Usage:
-  collect_data.py <synset_name>  <num_pairs> <infolder> <outfolder> [--pkl] [--tfr] [--save_depth] [--save_rate RATE] [--start_at INDEX] [--end_at INDEX] [--save_images]
+  collect_data.py <synset_name> <num_pairs> <infolder> <outfolder> [--pkl] [--tfr] [--save_depth] [--save_rate RATE] [--save_images]
 e.g.
-  collect_data.py plane 5 plane_dataset --tfr --save_depth --save_rate 50
+  collect_data.py plane 10000 plane_dataset --tfr --save_depth --save_rate 500
 """
 
 import rospy
@@ -37,12 +37,12 @@ import tensorflow as tf
 from cv_bridge import CvBridge
 import Image
 import re
-import sys
 import warnings
+import random
 
 import dyn_mult_view
 PLATFORM_LAUNCH = os.path.dirname(dyn_mult_view.__file__) + '/collect_data/launch/platform.launch'
-GAZEBO_STARTSTOP_FREQ = 30
+GAZEBO_STARTSTOP_FREQ = 1000
 
 def _bytes_feature(value):
     if not isinstance(value, (np.ndarray, list, tuple)):
@@ -58,9 +58,6 @@ def _sorted(dir_contents, synset_name):
   return sorted(dir_contents,
                 key=lambda x: int(re.match(r'%s([0-9]+)' % synset_name, x).group(1))
                     if re.match(r'%s([0-9]+)' % synset_name, x) else -10)
-
-# TODO: improve lighting
-# TODO: organize data in tuples of images and displacement vectors (im0, im1, displacement) so that we can use shuffling in the tfrecords reader
 
 class DataCollector(object):
   def __init__(self):
@@ -103,11 +100,9 @@ class DataCollector(object):
     rospy.sleep(10)
 
   def collect_data(self, synset_name, num_pairs=5, infolder='.', outfolder='.', pkl=False,
-                   tfr=False, save_depth=False, save_rate=None, start_at=0,
-                   end_at=sys.maxint, save_images=False):
+                   tfr=False, save_depth=False, save_rate=None, save_images=False):
     writer = None
-    curr_tfr_path = os.path.join(outfolder, '%s_%d.tfrecords' %
-                                 (synset_name, start_at // save_rate))
+    curr_tfr_path = os.path.join(outfolder, '%s_0.tfrecords' % synset_name)
     if tfr:
       writer = tf.python_io.TFRecordWriter(curr_tfr_path)
     start_time, pair_count = time.time(), 0
@@ -116,95 +111,91 @@ class DataCollector(object):
     gazebo_dir = infolder
     model_sdf_base = os.path.join(gazebo_dir, '/{}/model.sdf')
 
-    for model_name in _sorted(os.listdir(gazebo_dir), synset_name):
-      if model_name.startswith(synset_name):
-        model_i = int(re.match(r'%s([0-9]+)' % synset_name, model_name).group(1))
-        if model_i < start_at:
-          continue
-        elif model_i > end_at:
-          break
+    model_names = [mn for mn in _sorted(os.listdir(gazebo_dir), synset_name)
+                   if mn.startswith(synset_name)]
 
-        if self.gazebo_stopped:
-          self.start_gazebo()
+    for pair_index in range(num_pairs):
+      model_name = random.choice(model_names)
 
+      if self.gazebo_stopped:
+        self.start_gazebo()
 
-        # Set initial properties
-        model_sdf_file = model_sdf_base.format(model_name)
-        pos = [0, 0, 5]  # (x, y, z)
-        base_orientation = [1, 0, 0, 0]  # (w, x, y, z)
+      # Set initial properties
+      model_sdf_file = model_sdf_base.format(model_name)
+      pos = [0, 0, 5]  # (x, y, z)
+      base_orientation = [1, 0, 0, 0]  # (w, x, y, z)
+      rotation = [0] + [np.random.rand(), np.random.rand() * 6.28]
+      orientation = self.rotated(base_orientation, rotation)
+
+      """
+      Elevation - rotation around y-axis
+      Azimuth - rotation around z-axis
+
+      * 360 deg = 6.28 rad
+      """
+
+      imgs = []
+      prev_rotation, prev_img, prev_depth = None, None, None
+      for i in range(2):
+        # Spawn the object
+        self._call_spawn_object(model_name, model_sdf_file, *(pos + orientation))
+        rospy.sleep(1.1)
+        img, depth = self.latest_img, self.latest_depth
+        if pkl:
+          warnings.warn('pickling is deprecated', DeprecationWarning)
+          _info = {'img': img, 'orientation': orientation, 'rotation': rotation}
+          if save_depth:
+            _info.update({'depth': depth})
+          imgs.append(_info)
+        if save_images:
+          self.save_img(model_name, img, rotation, outfolder)
+          if save_depth:
+            self.save_img(model_name, depth, rotation, outfolder, depth=True)
+        if i % 2 == 1:
+          if tfr:
+            _prev_img_np = utils.from_sensor_msgs_img(prev_img)
+            _img_np = utils.from_sensor_msgs_img(img)
+            _prev_depth_np = utils.from_sensor_msgs_img(prev_depth, depth=True)
+            _depth_np = utils.from_sensor_msgs_img(depth, depth=True)
+            _displacement_np = np.array(rotation[1:]) - np.array(prev_rotation[1:])
+            example = tf.train.Example(features=tf.train.Features(feature={
+              'image0': _bytes_feature(tf.compat.as_bytes(_prev_img_np.tostring())),
+              'image1': _bytes_feature(tf.compat.as_bytes(_img_np.tostring())),
+              'depth0': _bytes_feature(tf.compat.as_bytes(_prev_depth_np.tostring())),
+              'depth1': _bytes_feature(tf.compat.as_bytes(_depth_np.tostring())),
+              'displacement': _float_feature(_displacement_np),  # (elevation, azimuth)
+            }))
+            writer.write(example.SerializeToString())
+          pair_count += 1
+
+        prev_img = img
+        prev_depth = depth
+        prev_rotation = rotation
+
+        # Delete the object
+        self._call_delete_model(model_name=model_name)
+        rospy.sleep(1.1)
+
+        # Define next orientation
         rotation = [0] + [np.random.rand(), np.random.rand() * 6.28]
         orientation = self.rotated(base_orientation, rotation)
 
-        """
-        Elevation - rotation around y-axis
-        Azimuth - rotation around z-axis
+      """
+      The tfrecords files, in order, will contain indices [0, save_rate - 1],
+      [save_rate, 2 * save_rate - 1], ... and so on so forth.
+      """
 
-        * 360 deg = 6.28 rad
-        """
+      if save_rate and (pair_index + 1) % save_rate == 0:
+        writer.close()
+        print('Wrote tfrecords through pair %d to %s.' % (pair_index, curr_tfr_path))
+        curr_tfr_path = os.path.join(outfolder, '%s_%d.tfrecords' %
+                                     (synset_name, (pair_index + 1) // save_rate))
+        writer = tf.python_io.TFRecordWriter(curr_tfr_path)
 
-        # Run through a series of orientations, saving an image for each
-        imgs = []
-        prev_rotation, prev_img, prev_depth = None, None, None
-        for i in range(num_pairs * 2):
-          # Spawn the object
-          self._call_spawn_object(model_name, model_sdf_file, *(pos + orientation))
-          rospy.sleep(1.1)
-          img, depth = self.latest_img, self.latest_depth
-          if pkl:
-            warnings.warn('pickling is deprecated', DeprecationWarning)
-            _info = {'img': img, 'orientation': orientation, 'rotation': rotation}
-            if save_depth:
-              _info.update({'depth': depth})
-            imgs.append(_info)
-          if save_images:
-            self.save_img(model_name, img, rotation, outfolder)
-            if save_depth:
-              self.save_img(model_name, depth, rotation, outfolder, depth=True)
-          if i % 2 == 1:
-            if tfr:
-              _prev_img_np = utils.from_sensor_msgs_img(prev_img)
-              _img_np = utils.from_sensor_msgs_img(img)
-              _prev_depth_np = utils.from_sensor_msgs_img(prev_depth, depth=True)
-              _depth_np = utils.from_sensor_msgs_img(depth, depth=True)
-              _displacement_np = np.array(rotation[1:]) - np.array(prev_rotation[1:])
-              example = tf.train.Example(features=tf.train.Features(feature={
-                'image0': _bytes_feature(tf.compat.as_bytes(_prev_img_np.tostring())),
-                'image1': _bytes_feature(tf.compat.as_bytes(_img_np.tostring())),
-                'depth0': _bytes_feature(tf.compat.as_bytes(_prev_depth_np.tostring())),
-                'depth1': _bytes_feature(tf.compat.as_bytes(_depth_np.tostring())),
-                'displacement': _float_feature(_displacement_np),  # (elevation, azimuth)
-              }))
-              writer.write(example.SerializeToString())
-            pair_count += 1
+      all_imgs[model_name] = imgs
 
-          prev_img = img
-          prev_depth = depth
-          prev_rotation = rotation
-
-          # Delete the object
-          self._call_delete_model(model_name=model_name)
-          rospy.sleep(1.1)
-
-          # Define next orientation
-          rotation = [0] + [np.random.rand(), np.random.rand() * 6.28]
-          orientation = self.rotated(base_orientation, rotation)
-
-        """
-        The tfrecords files, in order, will contain indices [0, save_rate - 1],
-        [save_rate, 2 * save_rate - 1], ... and so on so forth.
-        """
-
-        if save_rate and (model_i + 1) % save_rate == 0:
-          writer.close()
-          print('Wrote tfrecords through model %d to %s.' % (model_i, curr_tfr_path))
-          curr_tfr_path = os.path.join(outfolder, '%s_%d.tfrecords' %
-                                       (synset_name, (model_i + 1) // save_rate))
-          writer = tf.python_io.TFRecordWriter(curr_tfr_path)
-
-        all_imgs[model_name] = imgs
-
-        if (model_i + 1) % GAZEBO_STARTSTOP_FREQ == 0:
-          self.stop_gazebo()
+      if (pair_index + 1) % GAZEBO_STARTSTOP_FREQ == 0:
+        self.stop_gazebo()
 
     if pkl:
       with open(os.path.join(outfolder, '%s.pkl' % synset_name), 'wb') as f:
@@ -250,8 +241,6 @@ if __name__ == '__main__':
   parser.add_argument('--tfr', action='store_true')
   parser.add_argument('--save_depth', action='store_true')
   parser.add_argument('--save_rate', type=int)
-  parser.add_argument('--start_at', default=0, type=int)
-  parser.add_argument('--end_at', default=sys.maxint, type=int)
   parser.add_argument('--save_images', action='store_true')
   args = parser.parse_args()
 
@@ -260,6 +249,6 @@ if __name__ == '__main__':
 
   # Run data collection
   collector = DataCollector()
-  collector.collect_data(args.synset_name, args.num_pairs, args.infolder, args.outfolder,
-                         args.pkl, args.tfr, args.save_depth, args.save_rate,
-                         args.start_at, args.end_at, args.save_images)
+  collector.collect_data(args.synset_name, args.num_pairs, args.infolder,
+                         args.outfolder, args.pkl, args.tfr, args.save_depth,
+                         args.save_rate, args.save_images)
