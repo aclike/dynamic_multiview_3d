@@ -1,5 +1,9 @@
 import os
 import numpy as np
+
+import matplotlib
+matplotlib.rcParams['backend'] = 'Qt5Agg'
+matplotlib.rcParams['backend.qt5'] = 'PyQt5'
 import tensorflow as tf
 import sys
 import imp
@@ -26,16 +30,13 @@ VAL_INTERVAL = 500
 SAVE_INTERVAL = 4000
 
 
-def main(unused_argv, conf_script=None):
+def main():
   os.environ["CUDA_VISIBLE_DEVICES"] = str(FLAGS.device)
   print 'using CUDA_VISIBLE_DEVICES=', FLAGS.device
   from tensorflow.python.client import device_lib
   print device_lib.list_local_devices()
 
-  if conf_script == None:
-    conf_file = FLAGS.hyper
-  else:
-    conf_file = conf_script
+  conf_file = FLAGS.hyper
 
   if not os.path.exists(FLAGS.hyper):
     sys.exit("Experiment configuration not found")
@@ -46,11 +47,10 @@ def main(unused_argv, conf_script=None):
   if FLAGS.visualize:
     print 'creating visualizations ...'
     conf['data_dir'] = '/'.join(str.split(conf['data_dir'], '/')[:-1] + ['test'])
+    conf['visualize'] = conf['output_dir'] + '/' + FLAGS.visualize
     conf['event_log_dir'] = '/tmp'
-    conf['batch_size'] = 5
-    conf['sequence_length'] = 14
-    if FLAGS.diffmotions:
-      conf['sequence_length'] = 30
+    conf['batch_size'] = 64
+    conf['test_mode'] = ''
 
   if 'model' in conf:
     Model = conf['model']
@@ -73,7 +73,7 @@ def main(unused_argv, conf_script=None):
   tf.train.start_queue_runners(sess)
   sess.run(tf.global_variables_initializer())
 
-  if conf['visualize']:
+  if FLAGS.visualize:
     print '-------------------------------------------------------------------'
     print 'verify current settings!! '
     for key in conf.keys():
@@ -82,9 +82,9 @@ def main(unused_argv, conf_script=None):
 
     saver.restore(sess, conf['visualize'])
     print 'restore done.'
+    model.visualize(sess)
 
-    model.visualize(sess, 0)
-
+    return
 
   itr_0 = 0
   if FLAGS.pretrained != None:
@@ -93,8 +93,6 @@ def main(unused_argv, conf_script=None):
     else:
       conf['pretrained_model'] = FLAGS.pretrained
       saver.restore(sess, conf['pretrained_model'])
-
-
 
   print '-------------------------------------------------------------------'
   print 'verify current settings!! '
@@ -111,10 +109,9 @@ def main(unused_argv, conf_script=None):
   for itr in range(itr_0, conf['num_iterations'], 1):
     t_startiter = datetime.now()
     # Generate new batch of data_files.
-    feed_dict = {model.iter_num: np.float32(itr),
-                 model.train_cond: 1}
+    feed_dict = {model.train_cond: 1}
 
-    cost, _, summary_str = sess.run([model.loss, model.train_op, model.summ_op],
+    cost, _, summary_str = sess.run([model.loss, model.train_op, model.train_summ_op],
                                     feed_dict)
 
     if (itr) % 10 == 0:
@@ -122,9 +119,8 @@ def main(unused_argv, conf_script=None):
 
     if (itr) % VAL_INTERVAL == 2:
       # Run through validation set.
-      feed_dict = {model.iter_num: np.float32(itr),
-                   model.train_cond: 0}
-      [val_summary_str] = sess.run([model.summ_op], feed_dict)
+      feed_dict = {model.train_cond: 0}
+      [val_summary_str] = sess.run([model.val_summ_op], feed_dict)
       summary_writer.add_summary(val_summary_str, itr)
 
     if (itr) % SAVE_INTERVAL == 2:
@@ -150,3 +146,8 @@ def main(unused_argv, conf_script=None):
   saver.save(sess, conf['output_dir'] + '/model')
   tf.logging.info('Training complete')
   tf.logging.flush()
+
+
+if __name__ == '__main__':
+  tf.logging.set_verbosity(tf.logging.INFO)
+  main()

@@ -85,7 +85,7 @@ def save_images(images, size, image_path, color=True):
         img = np.zeros((h * size[0], w * size[1]))
 
     for idx, image in enumerate(images):
-        i = idx % size[1]
+        i = idx % size[0]
         j = math.floor(idx / size[1])
         if color is True:
             # img[j*h:j*h+h, i*w:i*w+w, :] = image

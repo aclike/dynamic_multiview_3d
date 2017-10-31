@@ -25,6 +25,7 @@ import sensor_msgs.msg as sensor_msg
 import gazebo_msgs.srv as gazebo_srv
 import roslaunch
 
+import pdb
 import os
 import argparse
 import utils
@@ -109,7 +110,7 @@ class DataCollector(object):
     all_imgs = {}
 
     gazebo_dir = infolder
-    model_sdf_base = os.path.join(gazebo_dir, '/{}/model.sdf')
+    model_sdf_base = gazebo_dir + '/{}/model.sdf'
 
     model_names = [mn for mn in _sorted(os.listdir(gazebo_dir), synset_name)
                    if mn.startswith(synset_name)]
@@ -138,6 +139,7 @@ class DataCollector(object):
       prev_rotation, prev_img, prev_depth = None, None, None
       for i in range(2):
         # Spawn the object
+        print("spawning {}".format(model_sdf_file))
         self._call_spawn_object(model_name, model_sdf_file, *(pos + orientation))
         rospy.sleep(1.1)
         img, depth = self.latest_img, self.latest_depth
