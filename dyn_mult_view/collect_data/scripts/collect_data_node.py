@@ -21,6 +21,8 @@ roslib.load_manifest('tf')
 # from collect_data.srv import RotateObject, SetOrientation, SpawnObject
 import collect_data.srv as collect_srv
 
+import sys
+import imp
 import sensor_msgs.msg as sensor_msg
 import gazebo_msgs.srv as gazebo_srv
 import roslaunch
@@ -100,8 +102,9 @@ class DataCollector(object):
     self.gazebo_stopped = True
     rospy.sleep(10)
 
-  def collect_data(self, synset_name, num_pairs=5, infolder='.', outfolder='.', pkl=False,
-                   tfr=False, save_depth=False, save_rate=None, save_images=False):
+  def collect_data(self, synset_name='', num_pairs=5, infolder='.', outfolder='.', pkl=False,
+                   tfr=True, save_depth=False, save_rate=None, save_images=False):
+    
     writer = None
     curr_tfr_path = os.path.join(outfolder, '%s_0.tfrecords' % synset_name)
     if tfr:
@@ -235,22 +238,19 @@ class DataCollector(object):
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
-  parser.add_argument('synset_name', type=str)
-  parser.add_argument('num_pairs', type=int)
-  parser.add_argument('infolder', type=str)
-  parser.add_argument('outfolder', type=str)
-  parser.add_argument('--pkl', action='store_true')
-  parser.add_argument('--tfr', action='store_true')
-  parser.add_argument('--save_depth', action='store_true')
-  parser.add_argument('--save_rate', type=int)
-  parser.add_argument('--save_images', action='store_true')
+
+  parser.add_argument('conf', type=str, help='specify configuration file')
   args = parser.parse_args()
 
-  if not os.path.exists(args.outfolder):
-    os.makedirs(args.outfolder)
+
+  if not os.path.exists(args.conf):
+    sys.exit("configuration not found")
+  conf = imp.load_source('conf', args.conf)
+  conf = conf.configuration
+
+  if not os.path.exists(conf['outfolder']):
+    os.makedirs(conf['outfolder'])
 
   # Run data collection
   collector = DataCollector()
-  collector.collect_data(args.synset_name, args.num_pairs, args.infolder,
-                         args.outfolder, args.pkl, args.tfr, args.save_depth,
-                         args.save_rate, args.save_images)
+  collector.collect_data(**conf)

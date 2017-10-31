@@ -116,7 +116,8 @@ def main():
   # for debugging only:
   conf = {}
   import dyn_mult_view
-  DATA_DIR = '/'.join(str.split(dyn_mult_view.__file__, '/')[:-2]) + '/trainingdata/plane_dataset/tfrecords/train'
+  # DATA_DIR = '/'.join(str.split(dyn_mult_view.__file__, '/')[:-2]) + '/trainingdata/plane_dataset2/tfrecords/train'
+  DATA_DIR = "/mnt/sda1/shapenet/tfrecords/plane_dataset2/train"
   conf['schedsamp_k'] = -1  # don't feed ground truth
   conf['data_dir'] = DATA_DIR  # 'directory containing data_files.' ,
   conf['train_val_split'] = 0.95

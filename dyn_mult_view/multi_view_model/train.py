@@ -42,7 +42,6 @@ def main():
   if not os.path.exists(FLAGS.hyper):
     sys.exit("Experiment configuration not found")
   hyperparams = imp.load_source('hyperparams', conf_file)
-
   conf = hyperparams.configuration
 
   if FLAGS.visualize:
