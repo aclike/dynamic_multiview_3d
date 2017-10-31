@@ -106,6 +106,7 @@ class Base_Prediction_Model():
     self.t_vars = tf.trainable_variables()
     self.saver = tf.train.Saver(max_to_keep=20)
 
+
   def build_loss(self):
 
     train_summaries = []
@@ -129,28 +130,25 @@ class Base_Prediction_Model():
                              feed_dict={self.train_cond: 0})
 
     print 'loss', loss
-    pdb.set_trace()
-
-    print 'input'
-    plt.imshow(image0[0])
-    plt.show()
-    print 'gtruth'
-    plt.imshow(image1[0])
-    plt.show()
-
-    print 'gen_image'
-    plt.imshow(gen[0])
-    plt.show()
-
-
+    #
+    # print 'input'
+    # plt.imshow(image0[0])
+    # plt.show()
+    # print 'gtruth'
+    # plt.imshow(image1[0])
+    # plt.show()
+    #
+    # print 'gen_image'
+    # plt.imshow(gen[0])
+    # plt.show()
 
     iter_num = re.match('.*?([0-9]+)$', self.conf['visualize']).group(1)
 
     path = self.conf['output_dir']
-    save_images(gen, [8, 8], path + "/output_%s.png" % (iter_num))
-    save_images(np.array(image1), [8, 8],
+    save_images(gen, [1, 8], path + "/output_%s.png" % (iter_num))
+    save_images(np.array(image1), [1, 8],
                 path + '/tr_gt_%s.png' % (iter_num))
-    save_images(np.array(image0), [8, 8],
+    save_images(np.array(image0), [1, 8],
                 path + '/tr_input_%s.png' % (iter_num))
 
 

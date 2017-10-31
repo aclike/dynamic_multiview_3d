@@ -10,6 +10,7 @@ import imp
 from tensorflow.python.platform import flags
 from datetime import datetime
 from main_model import Base_Prediction_Model
+import pdb
 
 from dyn_mult_view.mv3d.utils.tf_utils import load_snapshot
 
@@ -46,7 +47,9 @@ def main():
 
   if FLAGS.visualize:
     print 'creating visualizations ...'
+
     conf['data_dir'] = '/'.join(str.split(conf['data_dir'], '/')[:-1] + ['test'])
+
     conf['visualize'] = conf['output_dir'] + '/' + FLAGS.visualize
     conf['event_log_dir'] = '/tmp'
     conf['batch_size'] = 64
@@ -88,11 +91,14 @@ def main():
 
   itr_0 = 0
   if FLAGS.pretrained != None:
-    if FLAGS.pretrained == 'True':
-      load_snapshot(saver, sess, conf['output_dir'])
-    else:
-      conf['pretrained_model'] = FLAGS.pretrained
-      saver.restore(sess, conf['pretrained_model'])
+    conf['pretrained_model'] = FLAGS.pretrained
+
+    saver.restore(sess, conf['pretrained_model'])
+    # resume training at iteration step of the loaded model:
+    import re
+    itr_0 = re.match('.*?([0-9]+)$', conf['pretrained_model']).group(1)
+    itr_0 = int(itr_0)
+    print 'resuming training at iteration:  ', itr_0
 
   print '-------------------------------------------------------------------'
   print 'verify current settings!! '
