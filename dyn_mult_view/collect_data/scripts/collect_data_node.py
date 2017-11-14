@@ -277,6 +277,18 @@ if __name__ == '__main__':
   if not os.path.exists(args.outfolder):
     os.makedirs(args.outfolder)
 
+  # Save the command used to run everything
+  bin_dir = os.path.join(args.outfolder, 'bin')
+  os.makedirs(bin_dir)
+  with open(os.path.join(bin_dir, 'run.sh'), 'w') as file:
+    file.write(
+      'python collect_data_node.py {synset_name} {num_pairs} {infolder} {outfolder}{pkl}{tfr}{save_depth}{save_rate}{save_images}'.format(
+        synset_name=args.synset_name, num_pairs=args.num_pairs, infolder=args.infolder, outfolder=args.outfolder,
+        pkl=' --pkl' if args.pkl else '', tfr=' --tfr' if args.tfr else '', save_depth=' --save_depth' if args.save_depth else '',
+        save_rate=' --save_rate %d' % args.save_rate if args.save_rate else '', save_images=' --save_images' if args.save_images else ''
+      )
+    )
+
   # Run data collection
   collector = DataCollector()
   collector.collect_data(args.synset_name, args.num_models, args.pairs_per_model,
