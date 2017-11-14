@@ -4,6 +4,7 @@ roslib.load_manifest('collect_data')
 import cv2
 from cv_bridge import CvBridge, CvBridgeError
 import numpy as np
+import shutil
 
 import os
 import traceback
@@ -59,3 +60,26 @@ def from_sensor_msgs_img(img, depth=False):
       print(e)
       return
     return np.asarray(cv_img).astype(np.uint8)
+
+def rm_rf(dir, require_confirmation=True):
+  print('WARNING: about to delete the full contents of `%s`!' % dir)
+  if require_confirmation:
+    confirmation = raw_input('Are you sure you want to proceed? (True/False) ')
+  else:
+    confirmation = True
+  if (isinstance(confirmation, bool) and confirmation) \
+      or (isinstance(confirmation, str) and confirmation.lower() == 'true'):
+    for filename in os.listdir(dir):
+      filepath = os.path.join(dir, filename)
+      try:
+        if os.path.isfile(filepath):
+          os.unlink(filepath)
+        elif os.path.isdir(filepath):
+          shutil.rmtree(filepath)
+      except Exception as e:
+        print(e)
+    print('Successfully removed everything inside of `%s`.' % dir)
+    return True
+  else:
+    print('Operation `rm -rf %s` aborted.' % dir)
+    return False
