@@ -113,8 +113,17 @@ class DataCollector(object):
 
   def collect_data(self, synset_name, num_models=5, pairs_per_model=5, infolder='.', outfolder='.', pkl=False,
                    tfr=False, save_depth=False, save_rate=None, save_images=False):
+    train_dir = os.path.join(outfolder, 'train')
+    test_dir = os.path.join(outfolder, 'test')
+    validation_dir = os.path.join(outfolder, 'validation')
+    os.makedirs(train_dir)
+    os.makedirs(test_dir)
+    os.makedirs(validation_dir)
+
+    curr_outfolder = test_dir
+
     writer = None
-    curr_tfr_path = os.path.join(outfolder, '%s_0.tfrecords' % synset_name)
+    curr_tfr_path = os.path.join(curr_outfolder, '%s_0.tfrecords' % synset_name)
     if tfr:
       writer = tf.python_io.TFRecordWriter(curr_tfr_path)
     start_time, pair_count = time.time(), 0
@@ -163,9 +172,9 @@ class DataCollector(object):
         #     _info.update({'depth': depth})
         #   imgs.append(_info)
         if save_images:
-          self.save_img(model_name, img, rotation, outfolder)
+          self.save_img(model_name, img, rotation, curr_outfolder)
           if save_depth:
-            self.save_img(model_name, depth, rotation, outfolder, depth=True)
+            self.save_img(model_name, depth, rotation, curr_outfolder, depth=True)
         if i % 2 == 1:
           if tfr:
             _prev_img_np = utils.from_sensor_msgs_img(prev_img)
@@ -209,7 +218,11 @@ class DataCollector(object):
       if save_rate and (model_index + 1) % save_rate == 0:
         writer.close()
         print('Wrote tfrecords through model %d to %s.' % (model_index, curr_tfr_path))
-        curr_tfr_path = os.path.join(outfolder, '%s_%d.tfrecords' %
+        if curr_outfolder == test_dir:
+          curr_outfolder = validation_dir
+        elif curr_outfolder == validation_dir:
+          curr_outfolder = train_dir
+        curr_tfr_path = os.path.join(curr_outfolder, '%s_%d.tfrecords' %
                                      (synset_name, (model_index + 1) // save_rate))
         writer = tf.python_io.TFRecordWriter(curr_tfr_path)
 
@@ -218,9 +231,9 @@ class DataCollector(object):
       if (model_index + 1) % GAZEBO_STARTSTOP_FREQ == 0:
         self.stop_gazebo()
 
-    if pkl:
-      with open(os.path.join(outfolder, '%s.pkl' % synset_name), 'wb') as f:
-        pickle.dump(all_imgs, f)
+    # if pkl:
+    #   with open(os.path.join(outfolder, '%s.pkl' % synset_name), 'wb') as f:
+    #     pickle.dump(all_imgs, f)
     if tfr:
       writer.close()
     time_elapsed_s = time.time() - start_time
@@ -282,8 +295,8 @@ if __name__ == '__main__':
   os.makedirs(bin_dir)
   with open(os.path.join(bin_dir, 'run.sh'), 'w') as file:
     file.write(
-      'python collect_data_node.py {synset_name} {num_pairs} {infolder} {outfolder}{pkl}{tfr}{save_depth}{save_rate}{save_images}'.format(
-        synset_name=args.synset_name, num_pairs=args.num_pairs, infolder=args.infolder, outfolder=args.outfolder,
+      'python collect_data_node.py {synset_name} {num_models} {pairs_per_model} {infolder} {outfolder}{pkl}{tfr}{save_depth}{save_rate}{save_images}'.format(
+        synset_name=args.synset_name, num_models=args.num_models, pairs_per_model=args.pairs_per_model, infolder=args.infolder, outfolder=args.outfolder,
         pkl=' --pkl' if args.pkl else '', tfr=' --tfr' if args.tfr else '', save_depth=' --save_depth' if args.save_depth else '',
         save_rate=' --save_rate %d' % args.save_rate if args.save_rate else '', save_images=' --save_images' if args.save_images else ''
       )
