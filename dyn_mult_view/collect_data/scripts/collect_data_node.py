@@ -202,8 +202,7 @@ class DataCollector(object):
 
         # Rotate the object
         self.set_orientation(model_name, *orientation)
-        time.sleep(0.9)
-        rospy.sleep(1.1)  # TODO: all this sleeping necessary?
+        time.sleep(0.3)
 
       # Delete the object
       self._call_delete_model(model_name=model_name)
