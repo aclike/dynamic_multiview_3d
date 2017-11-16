@@ -3,7 +3,7 @@ current_dir = os.path.dirname(os.path.realpath(__file__))
 
 # tf record data location:
 import dyn_mult_view
-DATA_DIR = '/'.join(str.split(dyn_mult_view.__file__, '/')[:-2]) + '/trainingdata/plane_dataset/tfrecords/train'
+DATA_DIR = '/'.join(str.split(dyn_mult_view.__file__, '/')[:-2]) + '/trainingdata/plane_dataset3/train'
 
 # local output directory
 OUT_DIR = current_dir + '/modeldata'

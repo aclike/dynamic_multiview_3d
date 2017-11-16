@@ -145,10 +145,10 @@ class Base_Prediction_Model():
     iter_num = re.match('.*?([0-9]+)$', self.conf['visualize']).group(1)
 
     path = self.conf['output_dir']
-    save_images(gen, [1, 8], path + "/output_%s.png" % (iter_num))
-    save_images(np.array(image1), [1, 8],
+    save_images(gen, [8, 8], path + "/output_%s.png" % (iter_num))
+    save_images(np.array(image1), [8, 8],
                 path + '/tr_gt_%s.png' % (iter_num))
-    save_images(np.array(image0), [1, 8],
+    save_images(np.array(image0), [8, 8],
                 path + '/tr_input_%s.png' % (iter_num))
 
 

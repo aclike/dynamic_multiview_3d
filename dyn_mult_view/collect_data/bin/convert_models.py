@@ -14,7 +14,7 @@ import argparse
 import os, sys
 from dyn_mult_view.collect_data.scripts import utils
 import const
-from subprocess import call, check_output
+from subprocess import call, check_output, CalledProcessError
 import shutil
 from resize_models import define_scale
 
@@ -44,11 +44,14 @@ def main(synset_name, shapenet_dir, gazebo_dir, force=False):
       continue
     model_name = synset_name + str(i)
     shapenet_model_path = os.path.join(dirpath, 'models', 'model_normalized.obj')
-    meshtool_output = check_output([
-      'meshtool',
-      '--load_obj', shapenet_model_path,
-      '--print_bounds'
-    ])
+    try:
+      meshtool_output = check_output([
+        'meshtool',
+        '--load_obj', shapenet_model_path,
+        '--print_bounds'
+      ])
+    except CalledProcessError:
+      continue  # skip this model
     generate_gazebo_model_structure(gazebo_dir, model_name, meshtool_output)
     dae_model_path = os.path.join(gazebo_dir, model_name, 'meshes', 'model.dae')
     if force and os.path.isfile(dae_model_path):
