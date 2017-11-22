@@ -118,4 +118,5 @@ tfrecords/
 train/
 test/
 modeldata/
+shapenet/
 
