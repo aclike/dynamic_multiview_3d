@@ -1,4 +1,6 @@
 from main_model import Base_Prediction_Model
+from dyn_mult_view.mv3d.utils.tf_utils import *
+import tensorflow as tf
 
 class AppearanceFlowModel(Base_Prediction_Model):
 
