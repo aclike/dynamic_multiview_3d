@@ -173,7 +173,9 @@ class MtlFile:
                 # map_Kd == diffuse
                 # map_Bump == bump
                 # map_Ks == specular
-                mat.put(tokens[0], pathify(tokens[1], self.models_dir))
+                texture_path = pathify(tokens[1], self.models_dir)
+                print('texture path: %s' % texture_path)
+                mat.put(tokens[0], texture_path)
                 if verbose: print "map:", mat.name, tokens[0], mat.get(tokens[0])
                 continue
             if tokens[0] in ("Ni"):
