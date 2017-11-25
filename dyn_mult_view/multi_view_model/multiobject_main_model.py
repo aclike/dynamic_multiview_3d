@@ -118,9 +118,7 @@ class Base_Prediction_Model():
 
 
   def buildModel(self):
-
     # convolutional encoder
-
     concat_list = []
     if 'use_color' in self.conf:
       concat_list.append(self.image_preprocessing(self.image0_f, 'pre_image0_f'))

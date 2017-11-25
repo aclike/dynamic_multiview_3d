@@ -17,5 +17,6 @@ configuration = {
 'batch_size':64,
 'learning_rate':1e-4,
 'train_val_split':0.95,
-'use_color':''
+'use_depth':'',
+'depth_lr_factor':1.
 }

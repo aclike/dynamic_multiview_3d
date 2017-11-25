@@ -59,7 +59,7 @@ def main():
   else:
     Model = Base_Prediction_Model
 
-  model = Model(conf, load_tfrec=False)
+  model = Model(conf, load_tfrec=True)
 
   print 'Constructing saver.'
   # Make saver.
