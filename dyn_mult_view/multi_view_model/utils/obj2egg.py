@@ -104,8 +104,9 @@ class ObjMaterial:
 
 class MtlFile:
     """an object representing all Wavefront materials in a .mtl file"""
-    def __init__(self, filename=None):
+    def __init__(self, filename=None, models_dir=None):
         self.filename = None
+        self.models_dir = models_dir
         self.materials = {}
         self.comments = {}
         if filename is not None:
@@ -167,12 +168,12 @@ class MtlFile:
             if tokens[0] in ("Kd", "Ka", "Ks", "Ke"):
                 mat.put(tokens[0], floats(tokens[1:]))
                 continue
-            if tokens[0] in ("map_Kd", "map_Bump", "map_Ks", "map_bump", "bump"):
+            if tokens[0] in ("map_Kd", "map_Bump", "map_Ks", 'map_Ns', 'map_d', "map_bump", "bump"):
                 # Ultimate Unwrap 3D Pro emits these:
                 # map_Kd == diffuse
                 # map_Bump == bump
                 # map_Ks == specular
-                mat.put(tokens[0], pathify(tokens[1]))
+                mat.put(tokens[0], pathify(tokens[1], self.models_dir))
                 if verbose: print "map:", mat.name, tokens[0], mat.get(tokens[0])
                 continue
             if tokens[0] in ("Ni"):
@@ -188,6 +189,7 @@ class ObjFile:
     """a representation of a wavefront .obj file"""
     def __init__(self, filename=None):
         self.filename = None
+        self.models_dir = '/'.join(filename.split('/')[-2:])
         self.objects = ["defaultobject"]
         self.groups = ["defaultgroup"]
         self.points = []
@@ -240,7 +242,7 @@ class ObjFile:
                 continue
             if tokens[0] == "mtllib":
                 if verbose: print("mtllib:", tokens[1:])
-                mtllib = MtlFile(os.path.join(self.dir, tokens[1]))
+                mtllib = MtlFile(os.path.join(self.dir, tokens[1]), self.models_dir)
                 self.matlibs.append(mtllib)
                 self.indexmaterials(mtllib)
                 continue
@@ -493,19 +495,8 @@ class ObjFile:
                     self.__polylinestoegg(egg, objname, groupname)
         return egg
 
-def pathify(path):
-    if os.path.isfile(path):
-        return path
-    # if it was written on win32, it may have \'s in it, and
-    # also a full rather than relative pathname (Hexagon does this... ick)
-    orig = path
-    path = path.lower()
-    path = path.replace("\\", "/")
-    h, t = os.path.split(path)
-    if os.path.isfile(t):
-        return t
-    print "warning: can't make sense of this map file name:", orig
-    return t
+def pathify(path, models_dir=''):
+    return os.path.join(models_dir, path)
     
 def main(argv=None):
     if argv is None:
