@@ -119,4 +119,6 @@ train/
 test/
 modeldata/
 shapenet/
+train
+test
 

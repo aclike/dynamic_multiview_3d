@@ -28,7 +28,7 @@ SUMMARY_INTERVAL = 400
 VAL_INTERVAL = 500
 
 # How often to save a model checkpoint
-SAVE_INTERVAL = 4000
+SAVE_INTERVAL = 10000
 
 
 def main():
@@ -59,7 +59,7 @@ def main():
   else:
     Model = Base_Prediction_Model
 
-  model = Model(conf, load_tfrec=True)
+  model = Model(conf, load_tfrec=False)
 
   print 'Constructing saver.'
   # Make saver.
@@ -111,7 +111,7 @@ def main():
   t_iter = []
   # Run training.
 
-  for itr in range(itr_0, conf['num_iterations'], 1):
+  for itr in range(itr_0, conf['num_iterations'] +1, 1):
     t_startiter = datetime.now()
     # Generate new batch of data_files.
     feed_dict = {model.train_cond: 1}
@@ -122,19 +122,19 @@ def main():
     if (itr) % 10 == 0:
       tf.logging.info(str(itr) + ' ' + str(cost))
 
-    if (itr) % VAL_INTERVAL == 2:
+    if (itr) % VAL_INTERVAL == 0 and itr != 0:
       # Run through validation set.
       feed_dict = {model.train_cond: 0}
       [val_summary_str] = sess.run([model.val_summ_op], feed_dict)
       summary_writer.add_summary(val_summary_str, itr)
 
-    if (itr) % SAVE_INTERVAL == 2:
+    if (itr) % SAVE_INTERVAL == 0 and itr != 0:
       tf.logging.info('Saving model to' + conf['output_dir'])
       saver.save(sess, conf['output_dir'] + '/model' + str(itr))
 
     t_iter.append((datetime.now() - t_startiter).seconds * 1e6 + (datetime.now() - t_startiter).microseconds)
 
-    if itr % 100 == 1:
+    if (itr) % 100 == 1:
       hours = (datetime.now() - starttime).seconds / 3600
       tf.logging.info('running for {0}d, {1}h, {2}min'.format(
         (datetime.now() - starttime).days,
@@ -144,7 +144,7 @@ def main():
       tf.logging.info('time per iteration: {0}'.format(avg_t_iter / 1e6))
       tf.logging.info('expected for complete training: {0}h '.format(avg_t_iter / 1e6 / 3600 * conf['num_iterations']))
 
-    if (itr) % SUMMARY_INTERVAL:
+    if itr % SUMMARY_INTERVAL:
       summary_writer.add_summary(summary_str, itr)
 
   tf.logging.info('Saving model.')

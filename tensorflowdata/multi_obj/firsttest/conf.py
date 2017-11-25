@@ -8,8 +8,10 @@ DATA_DIR = '/'.join(str.split(dyn_mult_view.__file__, '/')[:-2]) + '/trainingdat
 # local output directory
 OUT_DIR = current_dir + '/modeldata'
 
+from dyn_mult_view.multi_view_model.multiobject_main_model import Base_Prediction_Model
+
 configuration = {
-'experiment_name': 'rndaction_var10',
+'model':Base_Prediction_Model,
 'data_dir': DATA_DIR,       # 'directory containing data.' ,
 'output_dir': OUT_DIR,      #'directory for model checkpoints.' ,
 'current_dir': current_dir,   #'directory for writing summary.' ,
