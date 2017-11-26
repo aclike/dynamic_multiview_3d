@@ -162,10 +162,16 @@ class Base_Prediction_Model():
 
   def visualize(self, sess):
 
-    image0, image1, gen_image1, loss, disp, pre_tanh = sess.run([self.image0, self.image1,
-                                                self.gen_image1, self.loss, self.disp,
-                                                self.pre_tanh],
-                             feed_dict={self.train_cond: 0})
+    if 'use_depth' in self.conf:
+      image0, image1, gen_image1, loss, disp, pre_tanh, dimage0, dimage1, gen_dimage1  = sess.run([self.image0, self.image1,
+                                                                   self.gen_image1, self.loss, self.disp,
+                                                                   self.pre_tanh, self.dimage0, self.dimage1, self.gen_dimage1],
+                                                                  feed_dict={self.train_cond: 0})
+    else:
+      image0, image1, gen_image1, loss, disp, pre_tanh = sess.run([self.image0, self.image1,
+                                                  self.gen_image1, self.loss, self.disp,
+                                                  self.pre_tanh],
+                               feed_dict={self.train_cond: 0})
 
     print 'loss', loss
     #
@@ -183,11 +189,19 @@ class Base_Prediction_Model():
     iter_num = re.match('.*?([0-9]+)$', self.conf['visualize']).group(1)
 
     path = self.conf['output_dir']
-    save_images(gen_image1, [8, 8], path + "/output_%s.png" % (iter_num))
-    save_images(np.array(image1), [8, 8],
-                path + '/tr_gt_%s.png' % (iter_num))
-    save_images(np.array(image0), [8, 8],
-                path + '/tr_input_%s.png' % (iter_num))
 
+    if 'use_color' in self.conf:
+      save_images(gen_image1, [8, 8], path + "/output_%s.png" % (iter_num))
+      save_images(np.array(image1), [8, 8],
+                  path + '/tr_gt_%s.png' % (iter_num))
+      save_images(np.array(image0), [8, 8],
+                  path + '/tr_input_%s.png' % (iter_num))
+
+    if 'use_depth' in self.conf:
+      save_images(np.squeeze(gen_dimage1), [8, 8], path + "/depth_output_%s.png" % (iter_num), color=False)
+      save_images(np.squeeze(dimage1), [8, 8],
+                  path + '/depth_tr_gt_%s.png' % (iter_num), color=False)
+      save_images(np.squeeze(dimage0), [8, 8],
+                  path + '/depth_tr_input_%s.png' % (iter_num), color=False)
 
 global_start_time = time.time()
