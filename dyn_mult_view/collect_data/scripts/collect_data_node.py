@@ -22,6 +22,8 @@ roslib.load_manifest('tf')
 # from collect_data.srv import RotateObject, SetOrientation, SpawnObject
 import collect_data.srv as collect_srv
 
+import sys
+import imp
 import gazebo_msgs.msg as gazebo_msg
 import geometry_msgs.msg as geometry_msg
 import sensor_msgs.msg as sensor_msg
@@ -298,8 +300,14 @@ if __name__ == '__main__':
   parser.add_argument('--save_images', action='store_true')
   args = parser.parse_args()
 
-  if not os.path.exists(args.outfolder):
-    os.makedirs(args.outfolder)
+
+  if not os.path.exists(args.conf):
+    sys.exit("configuration not found")
+  conf = imp.load_source('conf', args.conf)
+  conf = conf.configuration
+
+  if not os.path.exists(conf['outfolder']):
+    os.makedirs(conf['outfolder'])
 
   # Save the command used to run everything
   bin_dir = os.path.join(args.outfolder, 'bin')
@@ -315,6 +323,4 @@ if __name__ == '__main__':
 
   # Run data collection
   collector = DataCollector()
-  collector.collect_data(args.synset_name, args.num_models, args.pairs_per_model,
-                         args.infolder, args.outfolder, args.pkl, args.tfr,
-                         args.save_depth, args.save_rate, args.save_images)
+  collector.collect_data(**conf)

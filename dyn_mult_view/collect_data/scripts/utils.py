@@ -51,7 +51,7 @@ def from_sensor_msgs_img(img, depth=False):
   if depth:
     _img = np.copy(bridge.imgmsg_to_cv2(img))
     _img[np.isnan(_img)] = 0
-    return (255.0 / _img.max() * (_img - _img.min())).astype(np.uint8)
+    return (255.0 / (_img.max() + 1e-6) * (_img - _img.min())).astype(np.uint8)
   else:
     img.step = img.width * 3
     try:

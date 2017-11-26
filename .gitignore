@@ -118,3 +118,11 @@ tfrecords/
 train/
 test/
 modeldata/
+shapenet/
+train
+test
+
+
+shapenet_output/
+
+bam_path
