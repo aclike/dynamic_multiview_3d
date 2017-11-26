@@ -10,7 +10,7 @@ import Image
 import copy
 import tensorflow as tf
 
-bam_path = "../obj_cars2"
+bam_path = "../obj_cars3"
 output_path = "../shapenet_output"
 num_examples = 10
 save_images_as_pngs = True  # possibly only for debugging
@@ -30,7 +30,7 @@ def _float_feature(value):
 
 def main():
 
-    model_names = os.listdir(bam_path)
+    model_names = [mn for mn in os.listdir(bam_path) if mn.endswith('bam')]
     model_count = len(model_names)
 
     rend = Renderer(True, False)
@@ -46,8 +46,8 @@ def main():
         ind0, ind1 = random.randint(0, model_count - 1), random.randint(0, model_count - 1)
         while ind0 == ind1:
             ind1 = random.randint(0, model_count - 1)
-        pos0 = rend.showModel(ind0, debug=False)
-        pos1 = rend.showModel(ind1, debug=False)
+        pos0, yaw0 = rend.showModel(ind0, debug=False)
+        pos1, yaw1 = rend.showModel(ind1, debug=False)
 
         num_lights = random.randint(2, 4)
         lights = []
@@ -78,8 +78,8 @@ def main():
         # Per-object masks of the models (part 1)
         # ---------------------------------------
         rend.hideModel(ind1)
-        rend.showModel(ind0, pos=pos0, color='red')
-        rend.showModel(ind1, pos=pos1, color='green')
+        rend.showModel(ind0, pos=pos0, yaw=yaw0, color='red')
+        rend.showModel(ind1, pos=pos1, yaw=yaw1, color='green')
         _im0, _ = rend.renderView([rad, el0, az0], lights, blur0, blending0, default_bg_setting=False, reuse_camera_target=True)
 
         mask0_v0 = copy.deepcopy(_im0)[:, :, 0]
@@ -99,8 +99,8 @@ def main():
 
         rend.hideModel(ind0)
         rend.hideModel(ind1)
-        rend.showModel(ind0, pos=pos0)
-        rend.showModel(ind1, pos=pos1)
+        rend.showModel(ind0, pos=pos0, yaw=yaw0)
+        rend.showModel(ind1, pos=pos1, yaw=yaw1)
 
         # A randomly rotated view of the same two models
         # --------------------------------------------
@@ -131,7 +131,7 @@ def main():
 
         # (just model 1)
         rend.hideModel(ind0)
-        rend.showModel(ind1, pos=pos1)
+        rend.showModel(ind1, pos=pos1, yaw=yaw1)
         im3, dm3 = rend.renderView([rad, el1, az1], lights, blur1, blending1, default_bg_setting=False, reuse_camera_target=True)
 
         if save_images_as_pngs:
@@ -143,8 +143,8 @@ def main():
         # Per-object masks of the models (part 2)
         # ---------------------------------------
         rend.hideModel(ind1)
-        rend.showModel(ind0, pos=pos0, color='red')
-        rend.showModel(ind1, pos=pos1, color='green')
+        rend.showModel(ind0, pos=pos0, yaw=yaw0, color='red')
+        rend.showModel(ind1, pos=pos1, yaw=yaw1, color='green')
         _im1, _ = rend.renderView([rad, el1, az1], lights, blur1, blending1, default_bg_setting=False, reuse_camera_target=True)
 
         mask0_v1 = copy.deepcopy(_im1)[:, :, 0]
