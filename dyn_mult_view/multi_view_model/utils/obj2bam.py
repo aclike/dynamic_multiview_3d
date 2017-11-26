@@ -8,7 +8,7 @@ basedir = '/'.join(str.split(dyn_mult_view.__file__, '/')[:-1])
 
 OBJ2EGG_CMD = 'python ' + basedir + '/multi_view_model/utils/obj2egg.py {1}/model_normalized.obj'
 EGG2BAM_CMD = 'egg2bam -o {0}/model.bam {0}/model.egg'
-CP_CMD = 'cp {0}/model.bam {0}/../{1}.bam'
+CP_CMD = 'cp {0}/model.bam {0}/../../{1}.bam'
 
 full_cmd = '; '.join((OBJ2EGG_CMD, EGG2BAM_CMD, CP_CMD))
 
