@@ -10,6 +10,7 @@ import Image
 import copy
 import tensorflow as tf
 import cPickle
+import mmap
 
 import matplotlib.pyplot as plt
 import threading
@@ -264,7 +265,7 @@ class OnlineRenderer(object):
             file_split_dict = cPickle.load(open(split_file, "rb"))
         else:
             bam_path = conf['data_dir'] + '/bam_path'
-            all_model_names = [mn for mn in os.listdir(bam_path) if mn.endswith('bam')]
+            all_model_names = [mn for mn in os.listdir(bam_path) if mn.endswith('bam') and no_textures(mn)]
 
             train_frac = .8
             val_frac = .15
@@ -329,6 +330,11 @@ class OnlineRenderer(object):
         print 'setting mean displacment to ', mean_disp
         for t in self.thread_list:
             t.set_mean_displacement(mean_disp)
+
+def no_textures(bam_filepath):
+    f = open(bam_filepath)
+    s = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+    return s.find('texture') == -1 and s.find('Texture') == -1
 
 def test_online_renderer():
     sess = tf.InteractiveSession()
