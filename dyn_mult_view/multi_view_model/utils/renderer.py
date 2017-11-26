@@ -173,7 +173,7 @@ class Renderer(ShowBase):
     def dist2(pos0, pos1):
         return math.sqrt((pos0[0] - pos1[0]) ** 2 + (pos0[1] - pos1[1]) ** 2)
 
-    def showModel(self, model_ind, pos=None, debug=False, color=None):
+    def showModel(self, model_ind, pos=None, yaw=None, debug=False, color=None):
         if pos is None:
             x_variation = 0.5
             y_variation = 2.0
@@ -184,11 +184,14 @@ class Renderer(ShowBase):
                     if distance < 0.5 or distance > 1.5:
                         continue
                 break
+        if yaw is None:
+            yaw = random.random() * 360
         if debug:
             print('position for model %d: %r' % (model_ind, pos))
         self.models[model_ind].reparentTo(self.scene)
         self.models[model_ind].setX(pos[0])
         self.models[model_ind].setY(pos[1])
+        self.models[model_ind].setH(yaw)
         self.model_positions[model_ind] = self.models[model_ind].getPos()
 
         if color == 'red':
@@ -200,7 +203,7 @@ class Renderer(ShowBase):
             self.models[model_ind].setColor(0.0, 1.0, 0.0, 1.0, 1)  # r, g, b
             self.models[model_ind].setMaterial(self.green_mat)
 
-        return pos
+        return pos, yaw
 
     def hideModel(self, model_ind):
         # Cleanup
