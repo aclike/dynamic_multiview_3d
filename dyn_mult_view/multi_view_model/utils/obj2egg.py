@@ -198,6 +198,7 @@ class MtlFile:
                 # map_Kd == diffuse
                 # map_Bump == bump
                 # map_Ks == specular
+                raise NotImplementedError('textures not supported right now. Aborting...')
                 texture_path = pathify(tokens[1], self.models_dir)
                 print('texture path: %s' % texture_path)
                 mat.put(tokens[0], texture_path)
