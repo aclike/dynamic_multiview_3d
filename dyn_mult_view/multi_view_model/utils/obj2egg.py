@@ -21,6 +21,31 @@
 from pandac.PandaModules import *
 import getopt
 import sys, os
+from functools import wraps
+import errno
+import os
+import signal
+
+class TimeoutError(Exception):
+    pass
+
+def timeout(seconds=10, error_message=os.strerror(errno.ETIME)):
+    def decorator(func):
+        def _handle_timeout(signum, frame):
+            raise TimeoutError(error_message)
+
+        def wrapper(*args, **kwargs):
+            signal.signal(signal.SIGALRM, _handle_timeout)
+            signal.alarm(seconds)
+            try:
+                result = func(*args, **kwargs)
+            finally:
+                signal.alarm(0)
+            return result
+
+        return wraps(func)(wrapper)
+
+    return decorator
 
 
 def floats(float_list):
@@ -130,7 +155,7 @@ class MtlFile:
                 continue
             if line[0] == '#':
                 self.comments[linenumber] = line
-                print line
+                # print line
                 continue
             tokens = line.split()
             if not tokens:
@@ -191,7 +216,7 @@ class ObjFile:
     """a representation of a wavefront .obj file"""
     def __init__(self, filename=None):
         self.filename = None
-        self.models_dir = '/'.join(filename.split('/')[-2:])
+        self.models_dir = '/'.join(filename.split('/')[-3:-1])
         self.objects = ["defaultobject"]
         self.groups = ["defaultgroup"]
         self.points = []
@@ -237,7 +262,7 @@ class ObjFile:
                 continue
             if line[0] == '#':
                 self.comments[linenumber] = line
-                print line
+                # print line
                 continue
             tokens = line.split()
             if not tokens:
@@ -481,6 +506,7 @@ class ObjFile:
         #; each matching line
         return self
 
+    @timeout(600)
     def toEgg(self, verbose=True):
         if verbose: print "converting..."
         # make a new egg
@@ -522,22 +548,26 @@ def main(argv=None):
                 print "WARNING", finfile, "does not look like a valid obj file"
                 continue
             obj = ObjFile(infile)
-            egg = obj.toEgg()
-            f, e = os.path.splitext(infile)
-            outfile = f + ".egg"
-            for o, a in opts:
-                if o in ("-n", "--normals"):
-                    egg.recomputeVertexNormals(float(a))
-                elif o in ("-b", "--binormals"):
-                    egg.recomputeTangentBinormal(GlobPattern(""))
-            egg.removeUnusedVertices(GlobPattern(""))
-            if True:
-                egg.triangulatePolygons(EggData.TConvex & EggData.TPolygon)
-            if True:
-                egg.recomputePolygonNormals()
-            egg.writeEgg(Filename(outfile))
-            if show:
-                os.system("pview " + outfile)
+            try:
+                egg = obj.toEgg()
+                f, e = os.path.splitext(infile)
+                outfile = f + ".egg"
+                for o, a in opts:
+                    if o in ("-n", "--normals"):
+                        egg.recomputeVertexNormals(float(a))
+                    elif o in ("-b", "--binormals"):
+                        egg.recomputeTangentBinormal(GlobPattern(""))
+                egg.removeUnusedVertices(GlobPattern(""))
+                if True:
+                    egg.triangulatePolygons(EggData.TConvex & EggData.TPolygon)
+                if True:
+                    egg.recomputePolygonNormals()
+                egg.writeEgg(Filename(outfile))
+                if show:
+                    os.system("pview " + outfile)
+            except TimeoutError:
+                if os.path.exists(outfile):
+                    os.remove(outfile)
         except Exception,e:
             print e
     return 0
