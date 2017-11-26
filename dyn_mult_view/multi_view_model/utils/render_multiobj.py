@@ -195,6 +195,7 @@ def render_thread(bam_path, placeholders, enqueue_op, sess):
 
         _displacement_np = np.array([el1, az1]) - np.array([el0, az0])
 
+        max_16bit_val = 65535
         feed_dict = {
         placeholders['image0']: im0.astype(np.float32)/255.,
         placeholders['image0_mask0']: mask0_v0.astype(np.float32)/255.,
@@ -204,10 +205,10 @@ def render_thread(bam_path, placeholders, enqueue_op, sess):
         placeholders['image1_only1']: im3.astype(np.float32)/255.,
         placeholders['image1_mask0']: mask0_v1.astype(np.float32)/255.,
         placeholders['image1_mask1']: mask1_v1.astype(np.float32)/255.,
-        placeholders['depth0']:dm0.astype(np.float32)/255.,
-        placeholders['depth1']:dm1.astype(np.float32)/255.,
-        placeholders['depth1_only0']:dm2.astype(np.float32)/255.,
-        placeholders['depth1_only1']:dm3.astype(np.float32)/255.,
+        placeholders['depth0']:dm0.astype(np.float32)/max_16bit_val,
+        placeholders['depth1']:dm1.astype(np.float32)/max_16bit_val,
+        placeholders['depth1_only0']:dm2.astype(np.float32)/max_16bit_val,
+        placeholders['depth1_only1']:dm3.astype(np.float32)/max_16bit_val,
         placeholders['displacement']:_displacement_np.astype(np.float32)}   # (elevation, azimuth)
 
         sess.run(enqueue_op, feed_dict=feed_dict)
