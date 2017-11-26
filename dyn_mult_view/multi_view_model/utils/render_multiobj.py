@@ -13,6 +13,7 @@ import tensorflow as tf
 bam_path = "../obj_cars3"
 output_path = "../shapenet_output"
 num_examples = 10
+mean_abs_displacement = (5, 5)  # (elevation diff, azimuth diff) in degrees
 save_images_as_pngs = True  # possibly only for debugging
 
 
@@ -104,8 +105,9 @@ def main():
 
         # A randomly rotated view of the same two models
         # --------------------------------------------
-        el1 = int(random.random() * 50 - 10)
-        az1 = int(random.random() * 20) + 90  # reduced in order to better guarantee occlusion
+        multiplier = (-1, 1)
+        el1 = el0 + random.choice(multiplier) * np.random.normal(mean_abs_displacement[0], mean_abs_displacement[0])
+        az1 = az0 + random.choice(multiplier) * np.random.normal(mean_abs_displacement[1], mean_abs_displacement[1])
         blur1 = random.random() * 0.4 + 0.2
         blending1 = random.random() * 0.3 + 1
 
