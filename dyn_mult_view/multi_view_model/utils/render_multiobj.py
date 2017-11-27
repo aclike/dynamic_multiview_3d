@@ -349,7 +349,7 @@ def test_online_renderer():
     sess = tf.InteractiveSession()
     conf = {}
 
-    conf['batch_size'] = 64
+    conf['batch_size'] = 10
     conf['data_dir'] = '/home/frederik/Documents/catkin_ws/src/dynamic_multiview_3d/trainingdata/cardataset_bam'
 
     r = OnlineRenderer('train', conf, sess)
@@ -373,43 +373,73 @@ def test_online_renderer():
                                             r.depth1_only1,
                                             r.displacement,
                                             ])
-
         for b in range(1):
             print 'batchind', b
             iplt = 0
             iplt +=1
             plt.subplot(2, 4, iplt)
             plt.imshow(image0[b])
+            plt.axis('off')
 
             iplt += 1
             plt.subplot(2, 4, iplt)
             plt.imshow(image1[b])
+            plt.axis('off')
 
             iplt += 1
             plt.subplot(2, 4, iplt)
             plt.imshow(image1_only0[b])
+            plt.axis('off')
 
             iplt += 1
             plt.subplot(2, 4, iplt)
             plt.imshow(image1_only1[b])
+            plt.axis('off')
 
 
             ## depth
             iplt += 1
             plt.subplot(2, 4, iplt)
             plt.imshow(depth0[b])
+            plt.axis('off')
 
             iplt += 1
             plt.subplot(2, 4, iplt)
             plt.imshow(depth1[b])
+            plt.axis('off')
 
             iplt += 1
             plt.subplot(2, 4, iplt)
             plt.imshow(depth1_only0[b])
+            plt.axis('off')
 
             iplt += 1
             plt.subplot(2, 4, iplt)
             plt.imshow(depth1_only1[b])
+            plt.axis('off')
+
+            plt.show()
+
+            iplt = 0
+            iplt += 1
+            plt.subplot(1, 4, iplt)
+            plt.imshow(image0_mask0[b])
+            plt.axis('off')
+
+            iplt += 1
+            plt.subplot(1, 4, iplt)
+            plt.imshow(image0_mask1[b])
+            plt.axis('off')
+
+            iplt += 1
+            plt.subplot(1, 4, iplt)
+            plt.imshow(image1_mask0[b])
+            plt.axis('off')
+
+            iplt += 1
+            plt.subplot(1, 4, iplt)
+            plt.imshow(image1_mask1[b])
+            plt.axis('off')
 
             plt.show()
 
