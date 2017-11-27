@@ -12,6 +12,8 @@ import tensorflow as tf
 import cPickle
 import mmap
 
+from multiprocessing import Pool
+
 import gc
 
 import matplotlib.pyplot as plt
@@ -23,7 +25,7 @@ from collections import OrderedDict
 # bam_path = "/mnt/sda1/shapenet/shapenetcore_v2/ShapeNetCore.v2/02958343"
 
 output_path = "../shapenet_output"
-save_images_as_pngs = True  # possibly only for debugging
+save_images_as_pngs = False  # possibly only for debugging
 
 def _bytes_feature(value):
     if not isinstance(value, (np.ndarray, list, tuple)):
@@ -67,15 +69,14 @@ class Render_thread(threading.Thread):
         with self.lock:
             self.mean_abs_displacement = mean
 
-
     def run(self):
         _i = -1
-        num_load_models = 3
+        num_load_models = 30
         while True:
             _i += 1
             print '_i', _i
 
-            if _i % num_load_models == 0:
+            if _i % num_load_models*2 == 0:
                 print 'loading models...'
                 model_inds = np.random.randint(0, len(self.model_names_subset), num_load_models)
 
@@ -270,9 +271,7 @@ class OnlineRenderer(object):
             file_split_dict = cPickle.load(open(split_file, "rb"))
         else:
             bam_path = conf['data_dir'] + '/bam_path'
-            # all_model_names = [mn for mn in os.listdir(bam_path) if mn.endswith('bam') and no_textures(bam_path, mn)]
             all_model_names = [mn for mn in os.listdir(bam_path) if mn.endswith('bam')]
-
             #discard files over 40 MB for speed
             model_names = [mn for mn in all_model_names if os.path.getsize(os.path.join(bam_path,mn))/1024.**2 < 40]
             model_names = [mn for mn in model_names if no_textures(bam_path, mn)]
@@ -316,7 +315,7 @@ class OnlineRenderer(object):
 
         shapes = [placeholders[key].get_shape().as_list() for key in placeholders.keys()]
         dtypes = [placeholders[key].dtype for key in placeholders.keys()]
-        self.q = tf.FIFOQueue(10, dtypes, shapes=shapes)
+        self.q = tf.FIFOQueue(100, dtypes, shapes=shapes)
 
         placeholder_list = [placeholders[key] for key in placeholders.keys()]
         self.enqueue_op = self.q.enqueue(placeholder_list)
@@ -350,12 +349,12 @@ def test_online_renderer():
     sess = tf.InteractiveSession()
     conf = {}
 
-    conf['batch_size'] = 5
+    conf['batch_size'] = 64
     conf['data_dir'] = '/home/frederik/Documents/catkin_ws/src/dynamic_multiview_3d/trainingdata/cardataset_bam'
 
     r = OnlineRenderer('train', conf, sess)
 
-    for i_run in range(5):
+    for i_run in range(10):
         print 'run number ', i_run
 
         image0, image0_mask0, image0_mask1, image1, image1_only0, \
@@ -375,7 +374,7 @@ def test_online_renderer():
                                             r.displacement,
                                             ])
 
-        for b in range(4):
+        for b in range(1):
             print 'batchind', b
             iplt = 0
             iplt +=1
