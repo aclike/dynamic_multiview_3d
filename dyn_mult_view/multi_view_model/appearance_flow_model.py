@@ -1,6 +1,10 @@
 from main_model import Base_Prediction_Model
 from dyn_mult_view.mv3d.utils.tf_utils import *
 import tensorflow as tf
+import matplotlib.pyplot as plt
+
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
 
 class AppearanceFlowModel(Base_Prediction_Model):
 
@@ -58,3 +62,25 @@ class AppearanceFlowModel(Base_Prediction_Model):
 
         self.t_vars = tf.trainable_variables()
         self.saver = tf.train.Saver(max_to_keep=20)
+
+    def visualize(self, sess):
+
+        image0, image1, gen, loss, disp, pre_resampler = sess.run([self.image0, self.image1,
+                                                    self.gen, self.loss, self.disp,
+                                                    self.pre_resampler],
+                                 feed_dict={self.train_cond: 0})
+
+        print 'loss', loss
+
+        iter_num = re.match('.*?([0-9]+)$', self.conf['visualize']).group(1)
+
+        path = self.conf['output_dir']
+        save_images(gen, [8, 8], path + "/output_%s.png" % (iter_num))
+        save_images(np.array(image1), [8, 8],
+                    path + '/tr_gt_%s.png' % (iter_num))
+        save_images(np.array(image0), [8, 8],
+                    path + '/tr_input_%s.png' % (iter_num))
+
+        plt.axes([0, 0.025, 0.95, 0.95])
+        plt.quiver(pre_resampler[:,:,0],pre_resampler[:,:,1])
+        plt.savefig(path + '/quiver_%s.png' % (iter_num))
