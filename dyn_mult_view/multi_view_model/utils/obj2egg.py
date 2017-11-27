@@ -18,7 +18,7 @@
     licensed under WTFPL (http://sam.zoy.org/wtfpl/)
 """
 
-from pandac.PandaModules import *
+from panda3d.core import *
 import getopt
 import sys, os
 from functools import wraps

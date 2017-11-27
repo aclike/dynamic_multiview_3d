@@ -11,6 +11,8 @@ import copy
 import tensorflow as tf
 import cPickle
 import mmap
+from scipy.spatial.distance import cdist
+import math
 
 import gc
 
@@ -24,6 +26,8 @@ from collections import OrderedDict
 
 output_path = "../shapenet_output"
 save_images_as_pngs = True  # possibly only for debugging
+
+MASK_APPROACH = 'red_green'  # one of ('red_green', 'closer')
 
 def _bytes_feature(value):
     if not isinstance(value, (np.ndarray, list, tuple)):
@@ -120,30 +124,43 @@ class Render_thread(threading.Thread):
 
             # Per-object masks of the models (part 1)
             # ---------------------------------------
-            rend.hideModel(ind1)
-            rend.showModel(ind0, pos=pos0, yaw=yaw0, color='red')
-            rend.showModel(ind1, pos=pos1, yaw=yaw1, color='green')
-            _im0, _ = rend.renderView([rad, el0, az0], lights, blur0, blending0, default_bg_setting=False, reuse_camera_target=True)
+            image0_mask0, image0_mask1 = None, None
+            if MASK_APPROACH == 'red_green':
+                rend.hideModel(ind0)
+                rend.hideModel(ind1)
+                rend.showModel(ind0, pos=pos0, yaw=yaw0, color='red')
+                rend.showModel(ind1, pos=pos1, yaw=yaw1, color='green')
+                _im0, _ = rend.renderView([rad, el0, az0], lights, blur0, blending0, default_bg_setting=False, reuse_camera_target=True)
 
-            mask0_v0 = copy.deepcopy(_im0)[:, :, 0]
-            mask0_v0[mask0_v0 >= 128] = 255
-            mask0_v0[mask0_v0 <  128] = 0
-            mask0_v0 = (255.0 / mask0_v0.max() * (mask0_v0 - mask0_v0.min())).astype(np.uint8)
-            mask1_v0 = copy.deepcopy(_im0)[:, :, 1]
-            mask1_v0[mask1_v0 >= 128] = 255
-            mask1_v0[mask1_v0 <  128] = 0
-            mask1_v0 = (255.0 / mask1_v0.max() * (mask1_v0 - mask1_v0.min())).astype(np.uint8)
+                image0_mask0 = copy.deepcopy(_im0)[:, :, 0]
+                image0_mask0[image0_mask0 >= 128] = 255
+                image0_mask0[image0_mask0 < 128] = 0
+                image0_mask0 = (255.0 / image0_mask0.max() * (image0_mask0 - image0_mask0.min())).astype(np.uint8)
+                image0_mask1 = copy.deepcopy(_im0)[:, :, 1]
+                image0_mask1[image0_mask1 >= 128] = 255
+                image0_mask1[image0_mask1 <  128] = 0
+                image0_mask1 = (255.0 / image0_mask1.max() * (image0_mask1 - image0_mask1.min())).astype(np.uint8)
+
+                rend.hideModel(ind0)
+                rend.hideModel(ind1)
+                rend.showModel(ind0, pos=pos0, yaw=yaw0)
+                rend.showModel(ind1, pos=pos1, yaw=yaw1)
+            elif MASK_APPROACH == 'closer':
+                az0_rad = math.radians(az0)
+                el0_rad = math.radians(el0)
+                camera_pos = np.array([
+                    rad * math.cos(el0_rad) * math.cos(az0_rad),
+                    rad * math.cos(el0_rad) * math.sin(az0_rad),
+                    rad * math.sin(el0_rad)
+                ])
+                closer_idx = int(cdist(camera_pos, pos1 + (0,), 'euclidean') < cdist(camera_pos, pos0 + (0,), 'euclidean'))
+                raise NotImplementedError("didn't finish implementing this because I think I found the original error")
 
             if save_images_as_pngs:
-                mask0_v0_path = os.path.join(output_path, 'mask0_v0_view0.png')
-                mask1_v0_path = os.path.join(output_path, 'mask1_v0_view0.png')
-                Image.fromarray(mask0_v0).save(mask0_v0_path)
-                Image.fromarray(mask1_v0).save(mask1_v0_path)
-
-            rend.hideModel(ind0)
-            rend.hideModel(ind1)
-            rend.showModel(ind0, pos=pos0, yaw=yaw0)
-            rend.showModel(ind1, pos=pos1, yaw=yaw1)
+                mask0_v0_path = os.path.join(output_path, 'image0_mask0.png')
+                mask1_v0_path = os.path.join(output_path, 'image0_mask1.png')
+                Image.fromarray(image0_mask0).save(mask0_v0_path)
+                Image.fromarray(image0_mask1).save(mask1_v0_path)
 
             # A randomly rotated view of the same two models
             # --------------------------------------------
@@ -189,25 +206,29 @@ class Render_thread(threading.Thread):
 
             # Per-object masks of the models (part 2)
             # ---------------------------------------
-            rend.hideModel(ind1)
-            rend.showModel(ind0, pos=pos0, yaw=yaw0, color='red')
-            rend.showModel(ind1, pos=pos1, yaw=yaw1, color='green')
-            _im1, _ = rend.renderView([rad, el1, az1], lights, blur1, blending1, default_bg_setting=False, reuse_camera_target=True)
+            image1_mask0, image1_mask1 = None, None
+            if MASK_APPROACH == 'red_green':
+                rend.hideModel(ind1)
+                rend.showModel(ind0, pos=pos0, yaw=yaw0, color='red')
+                rend.showModel(ind1, pos=pos1, yaw=yaw1, color='green')
+                _im1, _ = rend.renderView([rad, el1, az1], lights, blur1, blending1, default_bg_setting=False, reuse_camera_target=True)
 
-            mask0_v1 = copy.deepcopy(_im1)[:, :, 0]
-            mask0_v1[mask0_v1 >= 128] = 255
-            mask0_v1[mask0_v1 <  128] = 0
-            mask0_v1 = (255.0 / mask0_v1.max() * (mask0_v1 - mask0_v1.min())).astype(np.uint8)
-            mask1_v1 = copy.deepcopy(_im1)[:, :, 1]
-            mask1_v1[mask1_v1 >= 128] = 255
-            mask1_v1[mask1_v1 <  128] = 0
-            mask1_v1 = (255.0 / mask1_v1.max() * (mask1_v1 - mask1_v1.min())).astype(np.uint8)
+                image1_mask0 = copy.deepcopy(_im1)[:, :, 0]
+                image1_mask0[image1_mask0 >= 128] = 255
+                image1_mask0[image1_mask0 <  128] = 0
+                image1_mask0 = (255.0 / image1_mask0.max() * (image1_mask0 - image1_mask0.min())).astype(np.uint8)
+                image1_mask1 = copy.deepcopy(_im1)[:, :, 1]
+                image1_mask1[image1_mask1 >= 128] = 255
+                image1_mask1[image1_mask1 <  128] = 0
+                image1_mask1 = (255.0 / image1_mask1.max() * (image1_mask1 - image1_mask1.min())).astype(np.uint8)
+            else:
+                raise NotImplementedError("didn't implement this")
 
             if save_images_as_pngs:
                 mask0_v1_path = os.path.join(output_path, 'mask0_v1_view1.png')
                 mask1_v1_path = os.path.join(output_path, 'mask1_v1_view1.png')
-                Image.fromarray(mask0_v1).save(mask0_v1_path)
-                Image.fromarray(mask1_v1).save(mask1_v1_path)
+                Image.fromarray(image1_mask0).save(mask0_v1_path)
+                Image.fromarray(image1_mask1).save(mask1_v1_path)
 
                 # for debugging
                 output_name = os.path.join(output_path, 'mask_original.png')
@@ -223,13 +244,13 @@ class Render_thread(threading.Thread):
 
             feed_dict = {
             placeholders['image0']: im0.astype(np.float32)/255.,
-            placeholders['image0_mask0']: mask0_v0.astype(np.float32)/255.,
-            placeholders['image0_mask1']: mask0_v0.astype(np.float32)/255.,
+            placeholders['image0_mask0']: image0_mask0.astype(np.float32) / 255.,
+            placeholders['image0_mask1']: image0_mask0.astype(np.float32) / 255.,
             placeholders['image1']: im1.astype(np.float32)/255.,
             placeholders['image1_only0']: im2.astype(np.float32)/255.,
             placeholders['image1_only1']: im3.astype(np.float32)/255.,
-            placeholders['image1_mask0']: mask0_v1.astype(np.float32)/255.,
-            placeholders['image1_mask1']: mask1_v1.astype(np.float32)/255.,
+            placeholders['image1_mask0']: image1_mask0.astype(np.float32)/255.,
+            placeholders['image1_mask1']: image1_mask1.astype(np.float32)/255.,
             placeholders['depth0']:dm0.astype(np.float32)/max_16bit_val,
             placeholders['depth1']:dm1.astype(np.float32)/max_16bit_val,
             placeholders['depth1_only0']:dm2.astype(np.float32)/max_16bit_val,
@@ -244,12 +265,12 @@ class Render_thread(threading.Thread):
             #     example = tf.train.Example(features=tf.train.Features(feature={
             #         'image0': _bytes_feature(tf.compat.as_bytes(im0.tostring())),
             #         'image0_mask0': _bytes_feature(tf.compat.as_bytes(mask0_v0.tostring())),
-            #         'image0_mask1': _bytes_feature(tf.compat.as_bytes(mask1_v0.tostring())),
+            #         'image0_mask1': _bytes_feature(tf.compat.as_bytes(image0_mask1.tostring())),
             #         'image1': _bytes_feature(tf.compat.as_bytes(im1.tostring())),
             #         'image1_only0': _bytes_feature(tf.compat.as_bytes(im2.tostring())),
             #         'image1_only1': _bytes_feature(tf.compat.as_bytes(im3.tostring())),
-            #         'image1_mask0': _bytes_feature(tf.compat.as_bytes(mask0_v1.tostring())),
-            #         'image1_mask1': _bytes_feature(tf.compat.as_bytes(mask1_v1.tostring())),
+            #         'image1_mask0': _bytes_feature(tf.compat.as_bytes(image1_mask0.tostring())),
+            #         'image1_mask1': _bytes_feature(tf.compat.as_bytes(image1_mask1.tostring())),
             #         'depth0': _bytes_feature(tf.compat.as_bytes(dm0.tostring())),
             #         'depth1': _bytes_feature(tf.compat.as_bytes(dm1.tostring())),
             #         'depth1_only0': _bytes_feature(tf.compat.as_bytes(dm2.tostring())),
