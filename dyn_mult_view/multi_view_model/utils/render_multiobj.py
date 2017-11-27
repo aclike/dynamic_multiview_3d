@@ -12,13 +12,15 @@ import tensorflow as tf
 import cPickle
 import mmap
 
+import gc
+
 import matplotlib.pyplot as plt
 import threading
 from collections import OrderedDict
 
 # bam_path = "../obj_cars3"
 
-bam_path = "/mnt/sda1/shapenet/shapenetcore_v2/ShapeNetCore.v2/02958343"
+# bam_path = "/mnt/sda1/shapenet/shapenetcore_v2/ShapeNetCore.v2/02958343"
 
 output_path = "../shapenet_output"
 save_images_as_pngs = True  # possibly only for debugging
@@ -68,7 +70,7 @@ class Render_thread(threading.Thread):
 
     def run(self):
         _i = -1
-        num_load_models = 30
+        num_load_models = 3
         while True:
             _i += 1
             print '_i', _i
@@ -79,6 +81,8 @@ class Render_thread(threading.Thread):
 
                 model_names = [self.model_names_subset[ind] for ind in list(model_inds)]
 
+                if _i !=0:
+                    rend.delete()
                 rend = Renderer(True, False)
                 rend.loadModels(model_names, self.bam_path)
 
@@ -262,19 +266,25 @@ class OnlineRenderer(object):
 
         split_file = conf['data_dir'] + '/train_val_split.pkl'
         if os.path.isfile(split_file):
+            print 'Loading splitfile from: ',split_file
             file_split_dict = cPickle.load(open(split_file, "rb"))
         else:
             bam_path = conf['data_dir'] + '/bam_path'
-            all_model_names = [mn for mn in os.listdir(bam_path) if mn.endswith('bam') and no_textures(mn)]
+            # all_model_names = [mn for mn in os.listdir(bam_path) if mn.endswith('bam') and no_textures(bam_path, mn)]
+            all_model_names = [mn for mn in os.listdir(bam_path) if mn.endswith('bam')]
+
+            #discard files over 40 MB for speed
+            model_names = [mn for mn in all_model_names if os.path.getsize(os.path.join(bam_path,mn))/1024.**2 < 40]
+            model_names = [mn for mn in model_names if no_textures(bam_path, mn)]
 
             train_frac = .8
             val_frac = .15
             test_frac = .05
-            model_count = len(all_model_names)
+            model_count = len(model_names)
 
             file_split_dict = {}
-            file_split_dict['train'] = all_model_names[:int(model_count*train_frac)]
-            rem_models = all_model_names[int(model_count*train_frac):]
+            file_split_dict['train'] = model_names[:int(model_count*train_frac)]
+            rem_models = model_names[int(model_count*train_frac):]
             file_split_dict['val'] = rem_models[:int(model_count*val_frac)]
             rem_models = rem_models[int(model_count*val_frac):]
             file_split_dict['test'] = rem_models
@@ -302,7 +312,7 @@ class OnlineRenderer(object):
         placeholders['depth1_only1'] = tf.placeholder(tf.float32, name='depth1_only1', shape=single_channel)
         placeholders['displacement'] = tf.placeholder(tf.float32, name='displacement', shape=[2])
 
-        self.num_threads = 5
+        self.num_threads = 1
 
         shapes = [placeholders[key].get_shape().as_list() for key in placeholders.keys()]
         dtypes = [placeholders[key].dtype for key in placeholders.keys()]
@@ -331,8 +341,8 @@ class OnlineRenderer(object):
         for t in self.thread_list:
             t.set_mean_displacement(mean_disp)
 
-def no_textures(bam_filepath):
-    f = open(bam_filepath)
+def no_textures(bam_path, modelname):
+    f = open(os.path.join(bam_path, modelname))
     s = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
     return s.find('texture') == -1 and s.find('Texture') == -1
 
