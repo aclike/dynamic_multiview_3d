@@ -83,3 +83,12 @@ def rm_rf(dir, require_confirmation=True):
   else:
     print('Operation `rm -rf %s` aborted.' % dir)
     return False
+
+def is_image_empty(img, depth=False):
+  if depth:
+    _img = np.copy(CvBridge().imgmsg_to_cv2(img))
+    _img[np.isnan(_img)] = 0
+    img = (255.0 / _img.max() * (_img - _img.min())).astype(np.uint8)
+  else:
+    img = from_sensor_msgs_img(img, depth=False)
+  return len(np.unique(img)) <= 3

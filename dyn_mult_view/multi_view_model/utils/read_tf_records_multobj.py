@@ -75,23 +75,23 @@ class Build_tfrecord_input():
       depth1_name: tf.FixedLenFeature([1], tf.string),
       depth1_only0_name: tf.FixedLenFeature([1], tf.string),
       depth1_only1_name: tf.FixedLenFeature([1], tf.string),
-      displacement_name: tf.FixedLenFeature([1], tf.string),
+      displacement_name: tf.FixedLenFeature([2], tf.float32),
     }
 
     features = tf.parse_single_example(serialized_example, features=features)
 
     image0 = process_image(features, image0_name)
-    image0_mask0 = process_image(features, image0_mask0_name)
-    image0_mask1 = process_image(features, image0_mask1_name)
+    image0_mask0 = process_image(features, image0_mask0_name, single_channel=True)
+    image0_mask1 = process_image(features, image0_mask1_name, single_channel=True)
     image1 = process_image(features, image1_name)
     image1_only0 = process_image(features, image1_only0_name)
     image1_only1 = process_image(features, image1_only1_name)
-    image1_mask0 = process_image(features, image1_mask0_name)
-    image1_mask1 = process_image(features, image1_mask1_name)
-    depth0 = process_image(features, depth0_name, depth_image=True)
-    depth1 = process_image(features, depth1_name, depth_image=True)
-    depth1_only0 = process_image(features, depth1_only0_name, depth_image=True)
-    depth1_only1 = process_image(features, depth1_only1_name, depth_image=True)
+    image1_mask0 = process_image(features, image1_mask0_name, single_channel=True)
+    image1_mask1 = process_image(features, image1_mask1_name, single_channel=True)
+    depth0 = process_image(features, depth0_name, single_channel=True)
+    depth1 = process_image(features, depth1_name, single_channel=True)
+    depth1_only0 = process_image(features, depth1_only0_name, single_channel=True)
+    depth1_only1 = process_image(features, depth1_only1_name, single_channel=True)
 
     displacement = features[displacement_name]
 
@@ -130,8 +130,8 @@ class Build_tfrecord_input():
                         num_threads=num_threads,
                         capacity=100 * conf['batch_size'])
 
-def process_image(features, image_name, depth_image=False):
-  if depth_image:
+def process_image(features, image_name, single_channel=False):
+  if single_channel:
     COLOR_CHAN = 1
   else:
     COLOR_CHAN = 3
@@ -161,7 +161,8 @@ def check_tfrecs():
   conf = {}
   import dyn_mult_view
   # DATA_DIR = '/'.join(str.split(dyn_mult_view.__file__, '/')[:-2]) + '/trainingdata/plane_dataset2/tfrecords/train'
-  DATA_DIR = "/mnt/sda1/shapenet/tfrecords/plane_dataset2/train"
+  DATA_DIR = "/home/frederik/Documents/catkin_ws/src/dynamic_multiview_3d/trainingdata/multicardataset/train"
+
   conf['data_dir'] = DATA_DIR  # 'directory containing data_files.' ,
   conf['train_val_split'] = 0.95
   conf['batch_size'] = 64

@@ -50,6 +50,7 @@ from subprocess import call
 import dyn_mult_view
 PLATFORM_LAUNCH = os.path.dirname(dyn_mult_view.__file__) + '/collect_data/launch/platform.launch'
 GAZEBO_STARTSTOP_FREQ = 500
+BUCKET_CAPACITY = 500
 
 def _bytes_feature(value):
     if not isinstance(value, (np.ndarray, list, tuple)):
@@ -71,6 +72,7 @@ class DataCollector(object):
     rospy.init_node('collect_data_node')
     rospy.sleep(2)
 
+    self.bucket = []  # for shuffling
     self.launch = None
     self.gazebo_stopped = True
     self.start_gazebo()
@@ -112,6 +114,24 @@ class DataCollector(object):
     self.launch.shutdown()
     self.gazebo_stopped = True
     rospy.sleep(10)
+
+  def write_bucket(self, writer):
+    random.shuffle(self.bucket)
+    for prev_img, img, prev_depth, depth, prev_rotation, rotation in self.bucket:
+      _prev_img_np = utils.from_sensor_msgs_img(prev_img)
+      _img_np = utils.from_sensor_msgs_img(img)
+      _prev_depth_np = utils.from_sensor_msgs_img(prev_depth, depth=True)
+      _depth_np = utils.from_sensor_msgs_img(depth, depth=True)
+      _displacement_np = np.array(rotation[1:]) - np.array(prev_rotation[1:])
+      example = tf.train.Example(features=tf.train.Features(feature={
+        'image0': _bytes_feature(tf.compat.as_bytes(_prev_img_np.tostring())),
+        'image1': _bytes_feature(tf.compat.as_bytes(_img_np.tostring())),
+        'depth0': _bytes_feature(tf.compat.as_bytes(_prev_depth_np.tostring())),
+        'depth1': _bytes_feature(tf.compat.as_bytes(_depth_np.tostring())),
+        'displacement': _float_feature(_displacement_np),  # (elevation, azimuth)
+      }))
+      writer.write(example.SerializeToString())
+    del self.bucket[:]
 
   def collect_data(self, synset_name, num_models=5, pairs_per_model=5, infolder='.', outfolder='.', pkl=False,
                    tfr=False, save_depth=False, save_rate=None, save_images=False):
@@ -160,38 +180,28 @@ class DataCollector(object):
       # Spawn the object
       print("spawning {}".format(model_sdf_file))
       self._call_spawn_object(model_name, model_sdf_file, *(pos + orientation))
-      rospy.sleep(1.1)
-      time.sleep(1.9)  # TODO: all this sleeping necessary?
+      time.sleep(0.3)
 
       imgs = []
       prev_rotation, prev_img, prev_depth = None, None, None
-      for i in range(2 * pairs_per_model):
+      i = 0
+      object_spawned = False
+      while i < 2 * pairs_per_model:
         img, depth = self.latest_img, self.latest_depth
-        # if pkl:
-        #   warnings.warn('pickling is deprecated', DeprecationWarning)
-        #   _info = {'img': img, 'orientation': orientation, 'rotation': rotation}
-        #   if save_depth:
-        #     _info.update({'depth': depth})
-        #   imgs.append(_info)
+        if not object_spawned:
+          if utils.is_image_empty(img) or utils.is_image_empty(depth, True):
+            time.sleep(0.05)
+            continue
+          object_spawned = True
         if save_images:
           self.save_img(model_name, img, rotation, curr_outfolder)
           if save_depth:
             self.save_img(model_name, depth, rotation, curr_outfolder, depth=True)
         if i % 2 == 1:
           if tfr:
-            _prev_img_np = utils.from_sensor_msgs_img(prev_img)
-            _img_np = utils.from_sensor_msgs_img(img)
-            _prev_depth_np = utils.from_sensor_msgs_img(prev_depth, depth=True)
-            _depth_np = utils.from_sensor_msgs_img(depth, depth=True)
-            _displacement_np = np.array(rotation[1:]) - np.array(prev_rotation[1:])
-            example = tf.train.Example(features=tf.train.Features(feature={
-              'image0': _bytes_feature(tf.compat.as_bytes(_prev_img_np.tostring())),
-              'image1': _bytes_feature(tf.compat.as_bytes(_img_np.tostring())),
-              'depth0': _bytes_feature(tf.compat.as_bytes(_prev_depth_np.tostring())),
-              'depth1': _bytes_feature(tf.compat.as_bytes(_depth_np.tostring())),
-              'displacement': _float_feature(_displacement_np),  # (elevation, azimuth)
-            }))
-            writer.write(example.SerializeToString())
+            self.bucket.append((prev_img, img, prev_depth, depth, prev_rotation, rotation))
+            if len(self.bucket) >= BUCKET_CAPACITY:
+              self.write_bucket(writer)
           pair_count += 1
 
         prev_img = img
@@ -205,6 +215,8 @@ class DataCollector(object):
         # Rotate the object
         self.set_orientation(model_name, *orientation)
         time.sleep(0.3)
+
+        i += 1
 
       # Delete the object
       self._call_delete_model(model_name=model_name)
@@ -232,9 +244,9 @@ class DataCollector(object):
       if (model_index + 1) % GAZEBO_STARTSTOP_FREQ == 0:
         self.stop_gazebo()
 
-    # if pkl:
-    #   with open(os.path.join(outfolder, '%s.pkl' % synset_name), 'wb') as f:
-    #     pickle.dump(all_imgs, f)
+    if len(self.bucket) > 0:
+      self.write_bucket(writer)
+
     if tfr:
       writer.close()
     time_elapsed_s = time.time() - start_time
