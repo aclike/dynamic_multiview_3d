@@ -36,7 +36,7 @@ IM_PER_PROC = 20
 output_path = "../shapenet_output"
 save_images_as_pngs = False  # possibly only for debugging
 
-MASK_APPROACH = 'red_green'  # one of ('red_green', 'closer')
+MASK_APPROACH = 'closer'  # one of ('red_green', 'closer')
 
 def _bytes_feature(value):
     if not isinstance(value, (np.ndarray, list, tuple)):
@@ -292,9 +292,9 @@ class Render_thread(threading.Thread):
         p = Pool()
         arg_list = [[self.bam_path, self.model_names_subset, self.mean_abs_displacement] for _ in range(NUM_PROC)]
         while True:
-
             # multiproc version
-            results = p.map_async(render_worker, arg_list).get()
+            # results = p.map_async(render_worker, arg_list).get()
+            render_worker(arg_list[0])
 
             print 'received results'
             # ray version
@@ -335,6 +335,7 @@ class Render_thread(threading.Thread):
             self.sess.run(self.enqueue_op, feed_dict=feedict)
 
             print 'finished enqueue'
+
 
             # if write_tf_recs:
             #     # Write everything to TFRecords
@@ -445,7 +446,7 @@ def test_online_renderer():
 
     r = OnlineRenderer('train', conf, sess)
     nruns = 10
-    tstart = time.time()
+    # tstart = time.time()
 
     for i_run in range(nruns):
         print 'run number ', i_run
@@ -466,78 +467,78 @@ def test_online_renderer():
                                             r.displacement,
                                             ])
 
-    avgt  = (time.time() - tstart)/(nruns)
-    print 'aver time per batch {} seconds'.format(avgt)
+    # avgt  = (time.time() - tstart)/(nruns)
+    # print 'aver time per batch {} seconds'.format(avgt)
 
-        # for b in range(1):
-        #     print 'batchind', b
-        #     iplt = 0
-        #     iplt +=1
-        #     plt.subplot(2, 4, iplt)
-        #     plt.imshow(image0[b])
-        #     plt.axis('off')
-        #
-        #     iplt += 1
-        #     plt.subplot(2, 4, iplt)
-        #     plt.imshow(image1[b])
-        #     plt.axis('off')
-        #
-        #     iplt += 1
-        #     plt.subplot(2, 4, iplt)
-        #     plt.imshow(image1_only0[b])
-        #     plt.axis('off')
-        #
-        #     iplt += 1
-        #     plt.subplot(2, 4, iplt)
-        #     plt.imshow(image1_only1[b])
-        #     plt.axis('off')
-        #
-        #
-        #     ## depth
-        #     iplt += 1
-        #     plt.subplot(2, 4, iplt)
-        #     plt.imshow(depth0[b])
-        #     plt.axis('off')
-        #
-        #     iplt += 1
-        #     plt.subplot(2, 4, iplt)
-        #     plt.imshow(depth1[b])
-        #     plt.axis('off')
-        #
-        #     iplt += 1
-        #     plt.subplot(2, 4, iplt)
-        #     plt.imshow(depth1_only0[b])
-        #     plt.axis('off')
-        #
-        #     iplt += 1
-        #     plt.subplot(2, 4, iplt)
-        #     plt.imshow(depth1_only1[b])
-        #     plt.axis('off')
-        #
-        #     plt.show()
-        #
-        #     iplt = 0
-        #     iplt += 1
-        #     plt.subplot(1, 4, iplt)
-        #     plt.imshow(image0_mask0[b])
-        #     plt.axis('off')
-        #
-        #     iplt += 1
-        #     plt.subplot(1, 4, iplt)
-        #     plt.imshow(image0_mask1[b])
-        #     plt.axis('off')
-        #
-        #     iplt += 1
-        #     plt.subplot(1, 4, iplt)
-        #     plt.imshow(image1_mask0[b])
-        #     plt.axis('off')
-        #
-        #     iplt += 1
-        #     plt.subplot(1, 4, iplt)
-        #     plt.imshow(image1_mask1[b])
-        #     plt.axis('off')
-        #
-        #     plt.show()
+        for b in range(1):
+            print 'batchind', b
+            iplt = 0
+            iplt +=1
+            plt.subplot(2, 4, iplt)
+            plt.imshow(image0[b])
+            plt.axis('off')
+
+            iplt += 1
+            plt.subplot(2, 4, iplt)
+            plt.imshow(image1[b])
+            plt.axis('off')
+
+            iplt += 1
+            plt.subplot(2, 4, iplt)
+            plt.imshow(image1_only0[b])
+            plt.axis('off')
+
+            iplt += 1
+            plt.subplot(2, 4, iplt)
+            plt.imshow(image1_only1[b])
+            plt.axis('off')
+
+
+            ## depth
+            iplt += 1
+            plt.subplot(2, 4, iplt)
+            plt.imshow(depth0[b])
+            plt.axis('off')
+
+            iplt += 1
+            plt.subplot(2, 4, iplt)
+            plt.imshow(depth1[b])
+            plt.axis('off')
+
+            iplt += 1
+            plt.subplot(2, 4, iplt)
+            plt.imshow(depth1_only0[b])
+            plt.axis('off')
+
+            iplt += 1
+            plt.subplot(2, 4, iplt)
+            plt.imshow(depth1_only1[b])
+            plt.axis('off')
+
+            plt.show()
+
+            iplt = 0
+            iplt += 1
+            plt.subplot(1, 4, iplt)
+            plt.imshow(image0_mask0[b])
+            plt.axis('off')
+
+            iplt += 1
+            plt.subplot(1, 4, iplt)
+            plt.imshow(image0_mask1[b])
+            plt.axis('off')
+
+            iplt += 1
+            plt.subplot(1, 4, iplt)
+            plt.imshow(image1_mask0[b])
+            plt.axis('off')
+
+            iplt += 1
+            plt.subplot(1, 4, iplt)
+            plt.imshow(image1_mask1[b])
+            plt.axis('off')
+
+            plt.show()
 
         # r.set_mean_displacement(tuple(np.array([5,5])*(i_run+2)))
 
