@@ -20,14 +20,15 @@ import collections
 from multiprocessing import Pool
 
 import gc
+import pdb
 
 import matplotlib.pyplot as plt
 import threading
 from collections import OrderedDict
 
 
-NUM_PROC = 11
-IM_PER_PROC = 4  ######
+NUM_PROC = 11#1
+IM_PER_PROC = 40  ######
 # bam_path = "../obj_cars3"
 
 # bam_path = "/mnt/sda1/shapenet/shapenetcore_v2/ShapeNetCore.v2/02958343"
@@ -363,26 +364,97 @@ def render_worker(arglist):
         _displacement_np = np.array([el1, az1]) - np.array([el0, az0])
 
         max_16bit_val = 65535
-        out.image0.append(im0.astype(np.float32)/255.),
+        out.image0.append(im0),
 
-        out.image0_mask0.append(image0_mask0.astype(np.float32) / 255.),
-        out.image0_mask1.append(image0_mask1.astype(np.float32) / 255.),
+        out.image0_mask0.append(image0_mask0),
+        out.image0_mask1.append(image0_mask1),
 
-        out.image1.append(im1.astype(np.float32)/255.),
+        out.image1.append(im1),
 
-        out.image1_only0.append(im2.astype(np.float32)/255.),
-        out.image1_only1.append(im3.astype(np.float32)/255.),
+        out.image1_only0.append(im2),
+        out.image1_only1.append(im3),
 
-        out.image1_mask0.append(image1_mask0.astype(np.float32)/255.),
-        out.image1_mask1.append(image1_mask1.astype(np.float32)/255.),
+        out.image1_mask0.append(image1_mask0),
+        out.image1_mask1.append(image1_mask1),
 
-        out.depth0.append(dm0.astype(np.float32)/max_16bit_val),
-        out.depth1.append(dm1.astype(np.float32)/max_16bit_val),
+        out.depth0.append((dm0.astype(np.float32)/max_16bit_val*245).astype(np.uint8)),
+        out.depth1.append((dm1.astype(np.float32)/max_16bit_val*245).astype(np.uint8)),
 
-        out.depth1_only0.append(dm2.astype(np.float32)/max_16bit_val),
-        out.depth1_only1.append(dm3.astype(np.float32)/max_16bit_val),
+        out.depth1_only0.append((dm2.astype(np.float32)/max_16bit_val*245).astype(np.uint8)),
+        out.depth1_only1.append((dm3.astype(np.float32)/max_16bit_val*245).astype(np.uint8)),
 
         out.displacement.append(_displacement_np.astype(np.float32)) # (elevation, azimuth)
+
+        verbose = False
+        if verbose:
+            f = plt.figure()
+            iplt = 0
+            iplt += 1
+            plt.subplot(2, 4, iplt)
+            plt.imshow(im0)
+            plt.axis('off')
+
+            iplt += 1
+            plt.subplot(2, 4, iplt)
+            plt.imshow(im1)
+            plt.axis('off')
+
+            iplt += 1
+            plt.subplot(2, 4, iplt)
+            plt.imshow(im2)
+            plt.axis('off')
+
+            iplt += 1
+            plt.subplot(2, 4, iplt)
+            plt.imshow(im3)
+            plt.axis('off')
+
+            ## depth
+            iplt += 1
+            plt.subplot(2, 4, iplt)
+            plt.imshow(dm0)
+            plt.axis('off')
+
+            iplt += 1
+            plt.subplot(2, 4, iplt)
+            plt.imshow(dm1)
+            plt.axis('off')
+
+            iplt += 1
+            plt.subplot(2, 4, iplt)
+            plt.imshow(dm2)
+            plt.axis('off')
+
+            iplt += 1
+            plt.subplot(2, 4, iplt)
+            plt.imshow(dm3)
+            plt.axis('off')
+
+            plt.draw()
+
+            f = plt.figure()
+            iplt = 0
+            iplt += 1
+            plt.subplot(1, 4, iplt)
+            plt.imshow(image0_mask0)
+            plt.axis('off')
+
+            iplt += 1
+            plt.subplot(1, 4, iplt)
+            plt.imshow(image0_mask1)
+            plt.axis('off')
+
+            iplt += 1
+            plt.subplot(1, 4, iplt)
+            plt.imshow(image1_mask0)
+            plt.axis('off')
+
+            iplt += 1
+            plt.subplot(1, 4, iplt)
+            plt.imshow(image1_mask1)
+            plt.axis('off')
+
+            plt.show()
 
     rend.delete()
     return out
@@ -444,6 +516,8 @@ def write_tf_records(mode, conf, num_examples, mean_abs_displacement):
     model_names_subset = get_file_names(conf['model3d_dir'], mode)
     bam_path = conf['model3d_dir'] + '/bam_path'
 
+    parallel = True
+
     p = Pool()
     arg_list = [[bam_path, model_names_subset, mean_abs_displacement] for _ in range(NUM_PROC)]
 
@@ -451,9 +525,14 @@ def write_tf_records(mode, conf, num_examples, mean_abs_displacement):
     num_runs = num_examples/ex_per_file
 
     ex_index = 0
+    assert num_runs > 0
     for i_ex in range(num_runs):
 
-        results = p.map_async(render_worker, arg_list).get()
+        if parallel:
+            results = p.map_async(render_worker, arg_list).get()
+        else:
+            results = render_worker(arg_list[0])
+
         print 'received results'
 
         feedict = {}
@@ -576,16 +655,15 @@ def no_textures(bam_path, modelname):
         return False
     return s.find('texture') == -1 and s.find('Texture') == -1
 
-def make_tfrecs():
+def make_tfrecs(num_examples):
     conf = {}
-    conf['batch_size'] = 64
     import dyn_mult_view
     basedir = '/'.join(str.split(dyn_mult_view.__file__, '/')[:-2])
     conf['model3d_dir'] = basedir + '/trainingdata/cardataset_bam'
     conf['tfrec_dir']  = basedir + '/trainingdata/multicardataset/train'
     assert os.listdir(conf['tfrec_dir']) == []
 
-    write_tf_records('train', conf,num_examples=32, mean_abs_displacement=(10,10))
+    write_tf_records('train', conf,num_examples=num_examples, mean_abs_displacement=(10,10))
 
 def test_online_renderer():
     sess = tf.InteractiveSession()
@@ -622,8 +700,10 @@ def test_online_renderer():
 
         for b in range(1):
             print 'batchind', b
+            f = plt.figure()
+
             iplt = 0
-            iplt +=1
+            iplt += 1
             plt.subplot(2, 4, iplt)
             plt.imshow(image0[b])
             plt.axis('off')
@@ -642,7 +722,6 @@ def test_online_renderer():
             plt.subplot(2, 4, iplt)
             plt.imshow(image1_only1[b])
             plt.axis('off')
-
 
             ## depth
             iplt += 1
@@ -665,8 +744,9 @@ def test_online_renderer():
             plt.imshow(depth1_only1[b])
             plt.axis('off')
 
-            plt.show()
+            plt.draw()
 
+            f = plt.figure()
             iplt = 0
             iplt += 1
             plt.subplot(1, 4, iplt)
@@ -694,4 +774,4 @@ def test_online_renderer():
 
 if __name__ == "__main__":
     # test_online_renderer()
-    make_tfrecs()
+    make_tfrecs(num_examples=2e5)
