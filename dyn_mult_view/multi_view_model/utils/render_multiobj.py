@@ -11,7 +11,6 @@ import copy
 import tensorflow as tf
 import cPickle
 import mmap
-from scipy.spatial.distance import cdist
 import math
 import time
 import ray
@@ -48,6 +47,9 @@ def _float_feature(value):
     if not isinstance(value, (np.ndarray, list, tuple)):
       value = [value]
     return tf.train.Feature(float_list=tf.train.FloatList(value=value))
+
+def l2_dist(arr1, arr2):
+    return np.sum((np.array(arr1) - np.array(arr2)) ** 2)
 
 class Output():
     def __init__(self):
@@ -141,13 +143,71 @@ def render_worker(arglist):
         elif MASK_APPROACH == 'closer':
             az0_rad = math.radians(az0)
             el0_rad = math.radians(el0)
-            camera_pos = np.array([
+            camera_pos0 = np.array([
                 rad * math.cos(el0_rad) * math.cos(az0_rad),
                 rad * math.cos(el0_rad) * math.sin(az0_rad),
                 rad * math.sin(el0_rad)
             ])
-            closer_idx = int(cdist(camera_pos, pos1 + (0,), 'euclidean') < cdist(camera_pos, pos0 + (0,), 'euclidean'))
-            raise NotImplementedError("didn't finish implementing this because I think I found the original error")
+            closer_idx = int(l2_dist(camera_pos0, pos1 + (0,)) < l2_dist(camera_pos0, pos0 + (0,)))
+            rend.hideModel(ind0 if closer_idx == 1 else ind1)
+            _im00, _ = rend.renderView([rad, el0, az0], lights, blur0, blending0, default_bg_setting=False, reuse_camera_target=True)
+            rend.hideModel(ind1 if closer_idx == 1 else ind0)
+            if closer_idx == 1:
+                _ind, _pos, _yaw = ind0, pos0, yaw0
+            else:
+                _ind, _pos, _yaw = ind1, pos1, yaw1
+            rend.showModel(_ind, pos=_pos, yaw=_yaw)
+            _im01, _ = rend.renderView([rad, el0, az0], lights, blur0, blending0, default_bg_setting=False,
+                                      reuse_camera_target=True)
+            if closer_idx == 1:
+                _ind, _pos, _yaw = ind1, pos1, yaw1
+            else:
+                _ind, _pos, _yaw = ind0, pos0, yaw0
+            rend.showModel(_ind, pos=_pos, yaw=_yaw)
+
+            image0_closer_mask = copy.deepcopy(_im00)
+            r_flat = image0_closer_mask[:, :, 0].flatten()
+            g_flat = image0_closer_mask[:, :, 1].flatten()
+            b_flat = image0_closer_mask[:, :, 2].flatten()
+            mf_rgb = np.array((
+              r_flat[np.histogram(r_flat)[0].argmax()],
+              g_flat[np.histogram(g_flat)[0].argmax()],
+              b_flat[np.histogram(b_flat)[0].argmax()],
+            ))
+            zero_indices = np.where(np.all(image0_closer_mask == mf_rgb, axis=-1))
+
+            image0_closer_mask = np.ones_like(image0_closer_mask[:, :, 0])
+            image0_closer_mask[zero_indices] = 0
+            image0_farther_mask = copy.deepcopy(_im01)
+            r_flat = image0_farther_mask[:, :, 0].flatten()
+            g_flat = image0_farther_mask[:, :, 1].flatten()
+            b_flat = image0_farther_mask[:, :, 2].flatten()
+            mf_rgb = np.array((
+              r_flat[np.histogram(r_flat)[0].argmax()],
+              g_flat[np.histogram(g_flat)[0].argmax()],
+              b_flat[np.histogram(b_flat)[0].argmax()],
+            ))
+            zero_indices = np.where(np.all(image0_farther_mask == mf_rgb, axis=-1))
+
+            image0_farther_mask = np.ones_like(image0_farther_mask[:, :, 0])
+            image0_farther_mask[zero_indices] = 0
+
+            image0_farther_mask[image0_closer_mask > 0] = 0
+            im0_closer_max = image0_closer_mask.max()
+            if im0_closer_max == 0:
+                print('error: current image all one color?')
+                im0_closer_max = 1
+            im0_farther_max = image0_farther_mask.max()
+            if im0_farther_max == 0:
+                print('error: current image all one color?')
+                im0_farther_max = 1
+            image0_closer_mask = (255.0 / im0_closer_max * (image0_closer_mask - image0_closer_mask.min())).astype(np.uint8)
+            image0_farther_mask = (255.0 / im0_farther_max * (image0_farther_mask - image0_farther_mask.min())).astype(np.uint8)
+
+            if closer_idx == 1:
+                image0_mask0, image0_mask1 = image0_farther_mask, image0_closer_mask
+            else:
+                image0_mask0, image0_mask1 = image0_closer_mask, image0_farther_mask
 
         if save_images_as_pngs:
             mask0_v0_path = os.path.join(output_path, 'image0_mask0.png')
@@ -213,12 +273,83 @@ def render_worker(arglist):
             image1_mask1[image1_mask1 >= 128] = 255
             image1_mask1[image1_mask1 <  128] = 0
             image1_mask1 = (255.0 / image1_mask1.max() * (image1_mask1 - image1_mask1.min())).astype(np.uint8)
-        else:
-            raise NotImplementedError("didn't implement this")
+        elif MASK_APPROACH == 'closer':
+            rend.showModel(ind0, pos=pos0, yaw=yaw0)
+            az1_rad = math.radians(az1)
+            el1_rad = math.radians(el1)
+            camera_pos1 = np.array([
+                rad * math.cos(el1_rad) * math.cos(az1_rad),
+                rad * math.cos(el1_rad) * math.sin(az1_rad),
+                rad * math.sin(el1_rad)
+            ])
+            closer_idx = int(
+                l2_dist(camera_pos1, pos1 + (0,)) < l2_dist(camera_pos1, pos0 + (0,)))
+            rend.hideModel(ind0 if closer_idx == 1 else ind1)
+            _im10, _ = rend.renderView([rad, el1, az1], lights, blur1, blending1, default_bg_setting=False,
+                                       reuse_camera_target=True)
+            rend.hideModel(ind1 if closer_idx == 1 else ind0)
+            if closer_idx == 1:
+                _ind, _pos, _yaw = ind0, pos0, yaw0
+            else:
+                _ind, _pos, _yaw = ind1, pos1, yaw1
+            rend.showModel(_ind, pos=_pos, yaw=_yaw)
+            _im11, _ = rend.renderView([rad, el1, az1], lights, blur1, blending1, default_bg_setting=False,
+                                       reuse_camera_target=True)
+            if closer_idx == 1:
+                _ind, _pos, _yaw = ind1, pos1, yaw1
+            else:
+                _ind, _pos, _yaw = ind0, pos0, yaw0
+            rend.showModel(_ind, pos=_pos, yaw=_yaw)
+
+            image1_closer_mask = copy.deepcopy(_im10)
+            r_flat = image1_closer_mask[:, :, 0].flatten()
+            g_flat = image1_closer_mask[:, :, 1].flatten()
+            b_flat = image1_closer_mask[:, :, 2].flatten()
+            mf_rgb = np.array((
+              r_flat[np.histogram(r_flat)[0].argmax()],
+              g_flat[np.histogram(g_flat)[0].argmax()],
+              b_flat[np.histogram(b_flat)[0].argmax()],
+            ))
+            zero_indices = np.where(np.all(image1_closer_mask == mf_rgb, axis=-1))
+
+            image1_closer_mask = np.ones_like(image1_closer_mask[:, :, 0])
+            image1_closer_mask[zero_indices] = 0
+
+            image1_farther_mask = copy.deepcopy(_im11)
+            r_flat = image1_farther_mask[:, :, 0].flatten()
+            g_flat = image1_farther_mask[:, :, 1].flatten()
+            b_flat = image1_farther_mask[:, :, 2].flatten()
+            mf_rgb = np.array((
+              r_flat[np.histogram(r_flat)[0].argmax()],
+              g_flat[np.histogram(g_flat)[0].argmax()],
+              b_flat[np.histogram(b_flat)[0].argmax()],
+            ))
+            zero_indices = np.where(np.all(image1_farther_mask == mf_rgb, axis=-1))
+
+            image1_farther_mask = np.ones_like(image1_farther_mask[:, :, 0])
+            image1_farther_mask[zero_indices] = 0
+            image1_farther_mask[image1_closer_mask > 0] = 0
+            im1_closer_max = image1_closer_mask.max()
+            if im1_closer_max == 0:
+                print('error: current image all one color?')
+                im1_closer_max = 1
+            im1_farther_max = image1_farther_mask.max()
+            if im1_farther_max == 0:
+                print('error: current image all one color?')
+                im1_farther_max = 1
+            image1_closer_mask = (
+                255.0 / im1_closer_max * (image1_closer_mask - image1_closer_mask.min())).astype(np.uint8)
+            image1_farther_mask = (
+                255.0 / im1_farther_max * (image1_farther_mask - image1_farther_mask.min())).astype(np.uint8)
+
+            if closer_idx == 1:
+                image1_mask0, image1_mask1 = image1_farther_mask, image1_closer_mask
+            else:
+                image1_mask0, image1_mask1 = image1_closer_mask, image1_farther_mask
 
         if save_images_as_pngs:
-            mask0_v1_path = os.path.join(output_path, 'mask0_v1_view1.png')
-            mask1_v1_path = os.path.join(output_path, 'mask1_v1_view1.png')
+            mask0_v1_path = os.path.join(output_path, 'image1_mask0.png')
+            mask1_v1_path = os.path.join(output_path, 'image1_mask1.png')
             Image.fromarray(image1_mask0).save(mask0_v1_path)
             Image.fromarray(image1_mask1).save(mask1_v1_path)
 
@@ -235,7 +366,7 @@ def render_worker(arglist):
         out.image0.append(im0.astype(np.float32)/255.),
 
         out.image0_mask0.append(image0_mask0.astype(np.float32) / 255.),
-        out.image0_mask1.append(image0_mask0.astype(np.float32) / 255.),
+        out.image0_mask1.append(image0_mask1.astype(np.float32) / 255.),
 
         out.image1.append(im1.astype(np.float32)/255.),
 
@@ -293,8 +424,8 @@ class Render_thread(threading.Thread):
         arg_list = [[self.bam_path, self.model_names_subset, self.mean_abs_displacement] for _ in range(NUM_PROC)]
         while True:
             # multiproc version
-            # results = p.map_async(render_worker, arg_list).get()
-            render_worker(arg_list[0])
+            results = p.map_async(render_worker, arg_list).get()
+            # render_worker(arg_list[0])
 
             print 'received results'
             # ray version
@@ -320,7 +451,7 @@ class Render_thread(threading.Thread):
             # feed_dict = {
             # placeholders['image0']: im0.astype(np.float32)/255.,
             # placeholders['image0_mask0']: image0_mask0.astype(np.float32) / 255.,
-            # placeholders['image0_mask1']: image0_mask0.astype(np.float32) / 255.,
+            # placeholders['image0_mask1']: image0_mask1.astype(np.float32) / 255.,
             # placeholders['image1']: im1.astype(np.float32)/255.,
             # placeholders['image1_only0']: im2.astype(np.float32)/255.,
             # placeholders['image1_only1']: im3.astype(np.float32)/255.,
@@ -342,7 +473,7 @@ class Render_thread(threading.Thread):
             #     _displacement_np = np.array([el1, az1]) - np.array([el0, az0])
             #     example = tf.train.Example(features=tf.train.Features(feature={
             #         'image0': _bytes_feature(tf.compat.as_bytes(im0.tostring())),
-            #         'image0_mask0': _bytes_feature(tf.compat.as_bytes(mask0_v0.tostring())),
+            #         'image0_mask0': _bytes_feature(tf.compat.as_bytes(image0_mask0.tostring())),
             #         'image0_mask1': _bytes_feature(tf.compat.as_bytes(image0_mask1.tostring())),
             #         'image1': _bytes_feature(tf.compat.as_bytes(im1.tostring())),
             #         'image1_only0': _bytes_feature(tf.compat.as_bytes(im2.tostring())),
@@ -434,7 +565,11 @@ class OnlineRenderer(object):
 
 def no_textures(bam_path, modelname):
     f = open(os.path.join(bam_path, modelname))
-    s = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+    try:
+        s = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+    except ValueError:
+        os.remove(os.path.join(bam_path, modelname))
+        return False
     return s.find('texture') == -1 and s.find('Texture') == -1
 
 def test_online_renderer():
