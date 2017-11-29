@@ -27,7 +27,7 @@ from collections import OrderedDict
 output_path = "../shapenet_output"
 save_images_as_pngs = True  # possibly only for debugging
 
-MASK_APPROACH = 'red_green'  # one of ('red_green', 'closer')
+MASK_APPROACH = 'closer'  # one of ('red_green', 'closer')
 
 def _bytes_feature(value):
     if not isinstance(value, (np.ndarray, list, tuple)):
@@ -154,7 +154,34 @@ class Render_thread(threading.Thread):
                     rad * math.sin(el0_rad)
                 ])
                 closer_idx = int(cdist(camera_pos, pos1 + (0,), 'euclidean') < cdist(camera_pos, pos0 + (0,), 'euclidean'))
-                raise NotImplementedError("didn't finish implementing this because I think I found the original error")
+                rend.hideModel(ind0 if closer_idx == 1 else ind1)
+                _im00, _ = rend.renderView([rad, el0, az0], lights, blur0, blending0, default_bg_setting=False, reuse_camera_target=True)
+                rend.hideModel(ind1 if closer_idx == 1 else ind0)
+                if closer_idx == 1:
+                    _ind, _pos, _yaw = ind0, pos0, yaw0
+                else:
+                    _ind, _pos, _yaw = ind1, pos1, yaw1
+                rend.showModel(_ind, pos=_pos, yaw=_yaw)
+                _im01, _ = rend.renderView([rad, el0, az0], lights, blur0, blending0, default_bg_setting=False,
+                                          reuse_camera_target=True)
+                if closer_idx == 1:
+                    _ind, _pos, _yaw = ind1, pos1, yaw1
+                else:
+                    _ind, _pos, _yaw = ind0, pos0, yaw0
+                rend.showModel(_ind, pos=_pos, yaw=_yaw)
+
+                image0_closer_mask = copy.deepcopy(_im00)
+                image0_closer_mask[image0_closer_mask == image0_closer_mask[0, 0, :]] = 0    # TODO does this do what I want?
+                image0_farther_mask = copy.deepcopy(_im01)
+                image0_farther_mask[image0_farther_mask == image0_farther_mask[0, 0, :]] = 0
+                image0_farther_mask[image0_closer_mask > 0] = 0
+                image0_closer_mask = (255.0 / image0_closer_mask.max() * (image0_closer_mask - image0_closer_mask.min())).astype(np.uint8)
+                image0_farther_mask = (255.0 / image0_farther_mask.max() * (image0_farther_mask - image0_farther_mask.min())).astype(np.uint8)
+
+                if closer_idx == 1:
+                    image0_mask0, image0_mask1 = image0_farther_mask, image0_closer_mask
+                else:
+                    image0_mask0, image0_mask1 = image0_closer_mask, image0_farther_mask
 
             if save_images_as_pngs:
                 mask0_v0_path = os.path.join(output_path, 'image0_mask0.png')
@@ -221,8 +248,48 @@ class Render_thread(threading.Thread):
                 image1_mask1[image1_mask1 >= 128] = 255
                 image1_mask1[image1_mask1 <  128] = 0
                 image1_mask1 = (255.0 / image1_mask1.max() * (image1_mask1 - image1_mask1.min())).astype(np.uint8)
-            else:
-                raise NotImplementedError("didn't implement this")
+            elif MASK_APPROACH == 'closer':
+                rend.showModel(ind0, pos=pos0, yaw=yaw0)
+                az0_rad = math.radians(az0)
+                el0_rad = math.radians(el0)
+                camera_pos = np.array([
+                    rad * math.cos(el0_rad) * math.cos(az0_rad),
+                    rad * math.cos(el0_rad) * math.sin(az0_rad),
+                    rad * math.sin(el0_rad)
+                ])
+                closer_idx = int(
+                    cdist(camera_pos, pos1 + (0,), 'euclidean') < cdist(camera_pos, pos0 + (0,), 'euclidean'))
+                rend.hideModel(ind0 if closer_idx == 1 else ind1)
+                _im00, _ = rend.renderView([rad, el0, az0], lights, blur0, blending0, default_bg_setting=False,
+                                           reuse_camera_target=True)
+                rend.hideModel(ind1 if closer_idx == 1 else ind0)
+                if closer_idx == 1:
+                    _ind, _pos, _yaw = ind0, pos0, yaw0
+                else:
+                    _ind, _pos, _yaw = ind1, pos1, yaw1
+                rend.showModel(_ind, pos=_pos, yaw=_yaw)
+                _im01, _ = rend.renderView([rad, el0, az0], lights, blur0, blending0, default_bg_setting=False,
+                                           reuse_camera_target=True)
+                if closer_idx == 1:
+                    _ind, _pos, _yaw = ind1, pos1, yaw1
+                else:
+                    _ind, _pos, _yaw = ind0, pos0, yaw0
+                rend.showModel(_ind, pos=_pos, yaw=_yaw)
+
+                image1_closer_mask = copy.deepcopy(_im00)
+                image1_closer_mask[image1_closer_mask == image1_closer_mask[0, 0, :]] = 0  # TODO does this do what I want?
+                image1_farther_mask = copy.deepcopy(_im01)
+                image1_farther_mask[image1_farther_mask == image1_farther_mask[0, 0, :]] = 0
+                image1_farther_mask[image1_closer_mask > 0] = 0
+                image1_closer_mask = (
+                    255.0 / image1_closer_mask.max() * (image1_closer_mask - image1_closer_mask.min())).astype(np.uint8)
+                image1_farther_mask = (
+                    255.0 / image1_farther_mask.max() * (image1_farther_mask - image1_farther_mask.min())).astype(np.uint8)
+
+                if closer_idx == 1:
+                    image1_mask0, image1_mask1 = image1_farther_mask, image1_closer_mask
+                else:
+                    image1_mask0, image1_mask1 = image1_closer_mask, image1_farther_mask
 
             if save_images_as_pngs:
                 mask0_v1_path = os.path.join(output_path, 'mask0_v1_view1.png')
