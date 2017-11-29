@@ -277,7 +277,7 @@ class Render_thread(threading.Thread):
         self.bam_path = conf['data_dir'] + '/bam_path'
 
         self.placeholders = placeholders
-        self.mean_abs_displacement = (5,5)
+        self.mean_abs_displacement = (10,10)  #####
 
         self.lock = threading.RLock()
         super(Render_thread, self).__init__()
@@ -293,8 +293,8 @@ class Render_thread(threading.Thread):
         arg_list = [[self.bam_path, self.model_names_subset, self.mean_abs_displacement] for _ in range(NUM_PROC)]
         while True:
             # multiproc version
-            # results = p.map_async(render_worker, arg_list).get()
-            render_worker(arg_list[0])
+            results = p.map_async(render_worker, arg_list).get()
+            # render_worker(arg_list[0])
 
             print 'received results'
             # ray version
@@ -306,7 +306,6 @@ class Render_thread(threading.Thread):
 
             feedict = {}
             for key in results[0].__dict__.keys():
-            # for key in dir(Output) if not key.startswith("__"):
                 concat = []
                 for r in results:
                     attrib = getattr(r, key)
@@ -337,27 +336,52 @@ class Render_thread(threading.Thread):
             print 'finished enqueue'
 
 
-            # if write_tf_recs:
-            #     # Write everything to TFRecords
-            #     _displacement_np = np.array([el1, az1]) - np.array([el0, az0])
-            #     example = tf.train.Example(features=tf.train.Features(feature={
-            #         'image0': _bytes_feature(tf.compat.as_bytes(im0.tostring())),
-            #         'image0_mask0': _bytes_feature(tf.compat.as_bytes(mask0_v0.tostring())),
-            #         'image0_mask1': _bytes_feature(tf.compat.as_bytes(image0_mask1.tostring())),
-            #         'image1': _bytes_feature(tf.compat.as_bytes(im1.tostring())),
-            #         'image1_only0': _bytes_feature(tf.compat.as_bytes(im2.tostring())),
-            #         'image1_only1': _bytes_feature(tf.compat.as_bytes(im3.tostring())),
-            #         'image1_mask0': _bytes_feature(tf.compat.as_bytes(image1_mask0.tostring())),
-            #         'image1_mask1': _bytes_feature(tf.compat.as_bytes(image1_mask1.tostring())),
-            #         'depth0': _bytes_feature(tf.compat.as_bytes(dm0.tostring())),
-            #         'depth1': _bytes_feature(tf.compat.as_bytes(dm1.tostring())),
-            #         'depth1_only0': _bytes_feature(tf.compat.as_bytes(dm2.tostring())),
-            #         'depth1_only1': _bytes_feature(tf.compat.as_bytes(dm3.tostring())),
-            #         'displacement': _float_feature(_displacement_np),  # (elevation, azimuth)
-            #     }))
-            #     writer.write(example.SerializeToString())
-        # writer.close()
+def write_tf_records(savedir, num_examples, bam_path, model_names_subset, mean_abs_displacement):
+    p = Pool()
+    arg_list = [[bam_path, model_names_subset, mean_abs_displacement] for _ in range(NUM_PROC)]
 
+    ex_per_file = NUM_PROC/IM_PER_PROC
+    num_runs = num_examples/ex_per_file
+
+    ex_index = 0
+    for i_ex in range(num_runs):
+
+        results = p.map_async(render_worker, arg_list).get()
+        print 'received results'
+
+        feedict = {}
+        out = Output()
+        for key in results[0].__dict__.keys():
+            concat = []
+            for r in results:
+                attrib = getattr(r, key)
+                attrib = np.stack(attrib, axis=0)
+                concat.append(attrib)
+            concat = np.concatenate(concat, axis=0)
+            setattr(out, key, concat)
+
+        filename = savedir + '/{}_to_{}.tfrecords'.format(ex_index, ex_index + ex_per_file -1)
+        ex_index += ex_per_file
+        writer = tf.python_io.TFRecordWriter(filename)
+        for b in range(IM_PER_PROC*NUM_PROC):
+            # Write everything to TFRecords
+            example = tf.train.Example(features=tf.train.Features(feature={
+                'image0': _bytes_feature(tf.compat.as_bytes(out.image0[b].tostring())),
+                'image0_mask0': _bytes_feature(tf.compat.as_bytes(out.image0_mask0[b].tostring())),
+                'image0_mask1': _bytes_feature(tf.compat.as_bytes(out.image0_mask1[b].tostring())),
+                'image1': _bytes_feature(tf.compat.as_bytes(out.image1[b].tostring())),
+                'image1_only0': _bytes_feature(tf.compat.as_bytes(out.image1_only0[b].tostring())),
+                'image1_only1': _bytes_feature(tf.compat.as_bytes(out.image1_only1[b].tostring())),
+                'image1_mask0': _bytes_feature(tf.compat.as_bytes(out.image1_mask0[b].tostring())),
+                'image1_mask1': _bytes_feature(tf.compat.as_bytes(out.image1_mask1[b].tostring())),
+                'depth0': _bytes_feature(tf.compat.as_bytes(out.depth0[b].tostring())),
+                'depth1': _bytes_feature(tf.compat.as_bytes(out.depth1[b].tostring())),
+                'depth1_only0': _bytes_feature(tf.compat.as_bytes(out.depth1_only0[b].tostring())),
+                'depth1_only1': _bytes_feature(tf.compat.as_bytes(out.depth1_only1[b].tostring())),
+                'displacement': _float_feature(out.displacement[b]),  # (elevation, azimuth)
+            }))
+            writer.write(example.SerializeToString())
+        writer.close()
 
 class OnlineRenderer(object):
     def __init__(self, mode, conf, sess):
