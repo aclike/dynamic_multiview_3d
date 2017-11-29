@@ -273,9 +273,7 @@ class Render_thread(threading.Thread):
 
         self.enqueue_op = enqueue_op
         self.sess = sess
-
-        self.bam_path = conf['data_dir'] + '/bam_path'
-
+        self.bam_path = conf['model3d_dir'] + '/bam_path'
         self.placeholders = placeholders
         self.mean_abs_displacement = (10,10)  #####
 
@@ -294,15 +292,7 @@ class Render_thread(threading.Thread):
         while True:
             # multiproc version
             results = p.map_async(render_worker, arg_list).get()
-            # render_worker(arg_list[0])
-
             print 'received results'
-            # ray version
-            # object_id_list = [render_worker.remote(self.bam_path,
-            #                                 self.model_names_subset,
-            #                                 self.mean_abs_displacement) for _ in range(NUM_PROC)]
-            # feedict = []
-            # results = ray.get(object_id_list)
 
             feedict = {}
             for key in results[0].__dict__.keys():
@@ -314,29 +304,15 @@ class Render_thread(threading.Thread):
                 concat = np.concatenate(concat, axis=0)
                 feedict[self.placeholders[key]] = concat
 
-            # max_16bit_val = 65535
-            # placeholders = self.placeholders
-            # feed_dict = {
-            # placeholders['image0']: im0.astype(np.float32)/255.,
-            # placeholders['image0_mask0']: image0_mask0.astype(np.float32) / 255.,
-            # placeholders['image0_mask1']: image0_mask0.astype(np.float32) / 255.,
-            # placeholders['image1']: im1.astype(np.float32)/255.,
-            # placeholders['image1_only0']: im2.astype(np.float32)/255.,
-            # placeholders['image1_only1']: im3.astype(np.float32)/255.,
-            # placeholders['image1_mask0']: image1_mask0.astype(np.float32)/255.,
-            # placeholders['image1_mask1']: image1_mask1.astype(np.float32)/255.,
-            # placeholders['depth0']:dm0.astype(np.float32)/max_16bit_val,
-            # placeholders['depth1']:dm1.astype(np.float32)/max_16bit_val,
-            # placeholders['depth1_only0']:dm2.astype(np.float32)/max_16bit_val,
-            # placeholders['depth1_only1']:dm3.astype(np.float32)/max_16bit_val,
-            # placeholders['displacement']:_displacement_np.astype(np.float32)}   # (elevation, azimuth)
-
             self.sess.run(self.enqueue_op, feed_dict=feedict)
 
             print 'finished enqueue'
 
 
-def write_tf_records(savedir, num_examples, bam_path, model_names_subset, mean_abs_displacement):
+def write_tf_records(mode, conf, num_examples, mean_abs_displacement):
+    bam_path = conf['model3d_dir'] + '/bam_path'
+    model_names_subset = get_file_names(bam_path, mode)
+
     p = Pool()
     arg_list = [[bam_path, model_names_subset, mean_abs_displacement] for _ in range(NUM_PROC)]
 
@@ -360,7 +336,7 @@ def write_tf_records(savedir, num_examples, bam_path, model_names_subset, mean_a
             concat = np.concatenate(concat, axis=0)
             setattr(out, key, concat)
 
-        filename = savedir + '/{}_to_{}.tfrecords'.format(ex_index, ex_index + ex_per_file -1)
+        filename = conf['tfrec_dir'] + '/{}_to_{}.tfrecords'.format(ex_index, ex_index + ex_per_file -1)
         ex_index += ex_per_file
         writer = tf.python_io.TFRecordWriter(filename)
         for b in range(IM_PER_PROC*NUM_PROC):
@@ -383,35 +359,37 @@ def write_tf_records(savedir, num_examples, bam_path, model_names_subset, mean_a
             writer.write(example.SerializeToString())
         writer.close()
 
+def get_file_names(model3d_dir, mode):
+    split_file = model3d_dir + '/train_val_split.pkl'
+    if os.path.isfile(split_file):
+        print 'Loading splitfile from: ', split_file
+        file_split_dict = cPickle.load(open(split_file, "rb"))
+    else:
+        bam_path = model3d_dir + '/bam_path'
+        all_model_names = [mn for mn in os.listdir(bam_path) if mn.endswith('bam')]
+        # discard files over 40 MB for speed
+        model_names = [mn for mn in all_model_names if os.path.getsize(os.path.join(bam_path, mn)) / 1024. ** 2 < 40]
+        model_names = [mn for mn in model_names if no_textures(bam_path, mn)]
+
+        train_frac = .8
+        val_frac = .15
+        test_frac = .05
+        model_count = len(model_names)
+
+        file_split_dict = {}
+        file_split_dict['train'] = model_names[:int(model_count * train_frac)]
+        rem_models = model_names[int(model_count * train_frac):]
+        file_split_dict['val'] = rem_models[:int(model_count * val_frac)]
+        rem_models = rem_models[int(model_count * val_frac):]
+        file_split_dict['test'] = rem_models
+        cPickle.dump(file_split_dict, open(split_file, 'wb'))
+
+    return file_split_dict[mode]
+
 class OnlineRenderer(object):
     def __init__(self, mode, conf, sess):
         self.conf = conf
-
-        split_file = conf['data_dir'] + '/train_val_split.pkl'
-        if os.path.isfile(split_file):
-            print 'Loading splitfile from: ',split_file
-            file_split_dict = cPickle.load(open(split_file, "rb"))
-        else:
-            bam_path = conf['data_dir'] + '/bam_path'
-            all_model_names = [mn for mn in os.listdir(bam_path) if mn.endswith('bam')]
-            #discard files over 40 MB for speed
-            model_names = [mn for mn in all_model_names if os.path.getsize(os.path.join(bam_path,mn))/1024.**2 < 40]
-            model_names = [mn for mn in model_names if no_textures(bam_path, mn)]
-
-            train_frac = .8
-            val_frac = .15
-            test_frac = .05
-            model_count = len(model_names)
-
-            file_split_dict = {}
-            file_split_dict['train'] = model_names[:int(model_count*train_frac)]
-            rem_models = model_names[int(model_count*train_frac):]
-            file_split_dict['val'] = rem_models[:int(model_count*val_frac)]
-            rem_models = rem_models[int(model_count*val_frac):]
-            file_split_dict['test'] = rem_models
-            cPickle.dump(file_split_dict, open(split_file, 'wb'))
-
-        self.sel_files = file_split_dict[mode]
+        self.sel_files = get_file_names(conf, mode)
 
         self.sess = sess
         self.batch_size = conf['batch_size']
@@ -461,12 +439,22 @@ def no_textures(bam_path, modelname):
     s = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
     return s.find('texture') == -1 and s.find('Texture') == -1
 
+def make_tfrecs():
+    conf = {}
+    conf['batch_size'] = 64
+    import dyn_mult_view
+    basedir = '/'.join(str.split(dyn_mult_view.__file__, '/')[:-2])
+    conf['model3d_dir'] = basedir + '/trainingdata/cardataset/cardataset_bam'
+    conf['tfrec_dir']  = basedir + '/trainingdata/multicardataset/train'
+
+    write_tf_records('train', conf,num_examples=100, mean_abs_displacement=(10,10))
+
 def test_online_renderer():
     sess = tf.InteractiveSession()
     conf = {}
 
     conf['batch_size'] = 64
-    conf['data_dir'] = '/home/frederik/Documents/catkin_ws/src/dynamic_multiview_3d/trainingdata/cardataset_bam'
+    conf['model3d_dir'] = '/home/frederik/Documents/catkin_ws/src/dynamic_multiview_3d/trainingdata/cardataset_bam'
 
     r = OnlineRenderer('train', conf, sess)
     nruns = 10
@@ -567,5 +555,7 @@ def test_online_renderer():
         # r.set_mean_displacement(tuple(np.array([5,5])*(i_run+2)))
 
 if __name__ == "__main__":
-    test_online_renderer()
-    # sys.exit(render_thread()
+    # test_online_renderer()
+    make_tfrecs()
+
+    check_tfrecs()
