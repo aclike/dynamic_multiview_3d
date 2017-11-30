@@ -9,230 +9,307 @@ from dyn_mult_view.multi_view_model.utils.read_tf_records import build_tfrecord_
 import pdb
 import matplotlib.pyplot as plt
 
+from utils.read_tf_records_multobj import Build_tfrecord_input
+
 class Base_Prediction_Model():
-  def __init__(self,
-               conf,
-               load_tfrec=True):
+    def __init__(self,
+                 conf,
+                 load_tfrec=True):
+        self.conf = conf
+        self.batch_size = 64
+        self.image_shape = [128, 128, 3]
+        self.scalar_imshape = [128, 128, 1]
 
-    self.conf = conf
-    self.batch_size = 64
-    self.image_shape = [128, 128, 3]
-    self.scalar_imshape = [128, 128, 1]
+        self.max_iter = 1000000
+        self.start_iter = 0
 
-    self.max_iter = 1000000
-    self.start_iter = 0
+        self.train_cond = tf.placeholder(tf.int32, shape=[], name="train_cond")
 
-    self.train_cond = tf.placeholder(tf.int32, shape=[], name="train_cond")
+        train_b = Build_tfrecord_input(conf, training=True)
+        val_b = Build_tfrecord_input(conf, training=False)
 
-    if not load_tfrec:
-      # pairs of images: the first one is the starting image the second is the image which
-      # shall be inferred
+        self.image0       ,\
+        self.image0_mask0 ,\
+        self.image0_mask1 ,\
+        self.image1       ,\
+        self.image1_only0 ,\
+        self.image1_only1 ,\
+        self.image1_mask0 ,\
+        self.image1_mask1 ,\
+        self.depth0       ,\
+        self.depth1       ,\
+        self.depth1_only0 ,\
+        self.depth1_only1 ,\
+        self.displacement  \
+        = tf.cond(self.train_cond > 0,  # if 1 use trainigbatch else validation batch
+                    lambda:
+                    [train_b.image0,
+                    train_b.image0_mask0,
+                    train_b.image0_mask1,
+                    train_b.image1,
+                    train_b.image1_only0,
+                    train_b.image1_only1,
+                    train_b.image1_mask0,
+                    train_b.image1_mask1,
+                    train_b.depth0,
+                    train_b.depth1,
+                    train_b.depth1_only0,
+                    train_b.depth1_only1,
+                    train_b.displacement],
+                    lambda:
+                  [val_b.image0,
+                   val_b.image0_mask0,
+                   val_b.image0_mask1,
+                   val_b.image1,
+                   val_b.image1_only0,
+                   val_b.image1_only1,
+                   val_b.image1_mask0,
+                   val_b.image1_mask1,
+                   val_b.depth0,
+                   val_b.depth1,
+                   val_b.depth1_only0,
+                   val_b.depth1_only1,
+                   val_b.displacement])
 
-      #inputs:
-      self.image0_f = tf.placeholder(tf.float32,
-                                     [self.batch_size] + self.image_shape,
-                                     name='input_images')
+        self.buildModel()
+        self.build_loss()
 
-      self.mask0_sep0 = tf.placeholder(tf.float32,
-                                       [self.batch_size] + self.scalar_imshape,
-                                       name='input_images')
+    def image_preprocessing(self, input, scope):
+        with tf.variable_scope(scope):
+            e0 = lrelu(conv2d_msra(input, 32, 5, 5, 2, 2, "e0"))  # 64x64
+            e0_0 = lrelu(conv2d_msra(e0, 32, 5, 5, 1, 1, "e0_0"))
+            e1 = lrelu(conv2d_msra(e0_0, 32, 5, 5, 2, 2, "e1"))  # 32x32
+            e1_0 = lrelu(conv2d_msra(e1, 32, 5, 5, 1, 1, "e1_0"))
+            e2 = lrelu(conv2d_msra(e1_0, 64, 5, 5, 2, 2, "e2"))  # 16x16
 
-      self.mask0_sep1 = tf.placeholder(tf.float32,
-                                       [self.batch_size] + self.scalar_imshape,
-                                       name='input_images')
+        return e2
 
-      self.dimage0_f = tf.placeholder(tf.float32,
-                                      [self.batch_size] + self.scalar_imshape,
-                                      name='input_images')
+    def decode(self, input, scope, num_outpus = 3):
+        with tf.variable_scope(scope):
+            d2 = lrelu(deconv2d_msra(input, [self.batch_size, 32, 32, 32],  # 32x32
+                                     5, 5, 2, 2, "d2"))
+            d2_0 = lrelu(conv2d_msra(d2, 64, 5, 5, 1, 1, "d2_0"))
+            d1 = lrelu(deconv2d_msra(d2_0, [self.batch_size, 64, 64, 32],  # 64x64
+                                     5, 5, 2, 2, "d1"))
+            d1_0 = lrelu(conv2d_msra(d1, 32, 5, 5, 1, 1, "d1_0"))
 
-      self.disp = tf.placeholder(tf.float32, [self.batch_size, 5],
-                                 name='labels')
+            self.pre_tanh = deconv2d_msra(d1_0, [self.batch_size, 128, 128, num_outpus], 5, 5, 2, 2, "d0")  # 128x128
 
-      #labels
-      self.image1_f = tf.placeholder(tf.float32,
-                                     [self.batch_size] + self.image_shape,
-                                     name='input_images')
+            gen = tf.nn.tanh(self.pre_tanh)
 
-      self.image1_sep0 = tf.placeholder(tf.float32,
-                                        [self.batch_size] + self.image_shape,
-                                        name='input_images')
-
-      self.image1_sep1 = tf.placeholder(tf.float32,
-                                        [self.batch_size] + self.image_shape,
-                                        name='input_images')
-
-      self.dimage1_f = tf.placeholder(tf.float32,
-                                      [self.batch_size] + self.scalar_imshape,
-                                      name='input_images')
-
-      self.dimage1_sep0 = tf.placeholder(tf.float32,
-                                         [self.batch_size] + self.scalar_imshape,
-                                         name='input_images')
-
-      self.dimage1_sep1 = tf.placeholder(tf.float32,
-                                         [self.batch_size] + self.scalar_imshape,
-                                         name='input_images')
-
-
-    else:
-      train_image0, train_image1, train_depth_image0, train_depth_image1, train_disp = build_tfrecord_input(conf, training=True)
-      val_image0, val_image1, val_depth_image0, val_depth_image1, val_disp = build_tfrecord_input(conf, training=False)
-
-      self.image0_f, self.image1_f, self.depth_image0, self.depth_image1, self.disp = tf.cond(self.train_cond > 0,  # if 1 use trainigbatch else validation batch
-                                                                                              lambda: [train_image0, train_image1, train_depth_image0, train_depth_image1, train_disp],
-                                                                                              lambda: [val_image0, val_image1, val_depth_image0, val_depth_image1, val_disp])
-      self.image0_f = tf.reshape(self.image0_f, [conf['batch_size'], 128, 128, 3])
-      self.image1_f = tf.reshape(self.image1_f, [conf['batch_size'], 128, 128, 3])
-      self.depth_image0 = tf.reshape(self.depth_image0, [conf['batch_size'], 128, 128, 1])
-      self.depth_image1 = tf.reshape(self.depth_image1, [conf['batch_size'], 128, 128, 1])
-
-    self.buildModel()
-    self.build_loss()
-
-  def image_preprocessing(self, input, scope):
-    with tf.variable_scope(scope):
-      e0 = lrelu(conv2d_msra(input, 32, 5, 5, 2, 2, "e0"))  # 64x64
-      e0_0 = lrelu(conv2d_msra(e0, 32, 5, 5, 1, 1, "e0_0"))
-      e1 = lrelu(conv2d_msra(e0_0, 32, 5, 5, 2, 2, "e1"))  # 32x32
-      e1_0 = lrelu(conv2d_msra(e1, 32, 5, 5, 1, 1, "e1_0"))
-      e2 = lrelu(conv2d_msra(e1_0, 64, 5, 5, 2, 2, "e2"))  # 16x16
-
-    return e2
-
-
-  def decode(self, input, scope):
-    with tf.variable_scope(scope):
-      d2 = lrelu(deconv2d_msra(input, [self.batch_size, 32, 32, 32],  # 32x32
-                               5, 5, 2, 2, "d2"))
-      d2_0 = lrelu(conv2d_msra(d2, 64, 5, 5, 1, 1, "d2_0"))
-      d1 = lrelu(deconv2d_msra(d2_0, [self.batch_size, 64, 64, 32],  # 64x64
-                               5, 5, 2, 2, "d1"))
-      d1_0 = lrelu(conv2d_msra(d1, 32, 5, 5, 1, 1, "d1_0"))
-
-      self.pre_tanh = deconv2d_msra(d1_0, [self.batch_size, 128, 128, 3], 5, 5, 2, 2, "d0")  # 128x128
-
-      gen = tf.nn.tanh(self.pre_tanh)
-
-    return gen
+        return gen
 
 
 
-  def buildModel(self):
-    # convolutional encoder
-    concat_list = []
-    if 'use_color' in self.conf:
-      concat_list.append(self.image_preprocessing(self.image0_f, 'pre_image0_f'))
-    if 'use_depth' in self.conf:
-      concat_list.append(self.image_preprocessing(self.image0_f, 'pre_dimage0_f'))
+    def buildModel(self):
+        # convolutional encoder
+        concat_list = []
+        if 'use_color' in self.conf:
+            concat_list.append(self.image_preprocessing(self.image0, 'pre_image0_f'))
+        if 'use_depth' in self.conf:
+            concat_list.append(self.image_preprocessing(self.depth0, 'pre_dimage0_f'))
 
-    concat_list.append(self.image_preprocessing(self.mask0_sep0, 'pre_mask0_ob0'))
-    concat_list.append(self.image_preprocessing(self.mask0_sep0, 'pre_mask0_ob1'))
+        concat_list.append(self.image_preprocessing(self.image0_mask0, 'pre_mask0_ob0'))
+        concat_list.append(self.image_preprocessing(self.image0_mask1, 'pre_mask0_ob1'))
 
-    comb_enc = tf.concat(axis=3, values=concat_list)
+        comb_enc = tf.concat(axis=3, values=concat_list)
 
-    e2_0 = lrelu(conv2d_msra(comb_enc, 64, 5, 5, 1, 1, "e2_0"))
-    e3 = lrelu(conv2d_msra(e2_0, 128, 3, 3, 2, 2, "e3"))  #8x8
-    e3_0 = lrelu(conv2d_msra(e3, 128, 3, 3, 1, 1, "e3_0"))
-    e4 = lrelu(conv2d_msra(e3_0, 256, 3, 3, 2, 2, "e4"))  #4x4
-    e4_0 = lrelu(conv2d_msra(e4, 256, 3, 3, 1, 1, "e4_0"))
-    e4r = tf.reshape(e4_0, [self.batch_size, 4096])
-    e5 = lrelu(linear_msra(e4r, 4096, "fc1"))
+        e2_0 = lrelu(conv2d_msra(comb_enc, 64, 5, 5, 1, 1, "e2_0"))
+        e3 = lrelu(conv2d_msra(e2_0, 128, 3, 3, 2, 2, "e3"))  #8x8
+        e3_0 = lrelu(conv2d_msra(e3, 128, 3, 3, 1, 1, "e3_0"))
+        e4 = lrelu(conv2d_msra(e3_0, 256, 3, 3, 2, 2, "e4"))  #4x4
+        e4_0 = lrelu(conv2d_msra(e4, 256, 3, 3, 1, 1, "e4_0"))
+        e4r = tf.reshape(e4_0, [self.batch_size, 4096])
+        e5 = lrelu(linear_msra(e4r, 4096, "fc1"))
 
-    # angle processing
-    a0 = lrelu(linear_msra(self.disp, 64, "a0"))
-    a1 = lrelu(linear_msra(a0, 64, "a1"))
-    a2 = lrelu(linear_msra(a1, 64, "a2"))
+        # angle processing
+        a0 = lrelu(linear_msra(self.displacement, 64, "a0"))
+        a1 = lrelu(linear_msra(a0, 64, "a1"))
+        a2 = lrelu(linear_msra(a1, 64, "a2"))
 
-    concated = tf.concat(axis=1, values=[e5, a2])
+        concated = tf.concat(axis=1, values=[e5, a2])
 
-    # joint processing
-    a3 = lrelu(linear_msra(concated, 4096, "a3"))
-    a4 = lrelu(linear_msra(a3, 4096, "a4"))
-    a5 = lrelu(linear_msra(a4, 4096, "a5"))
-    a5r = tf.reshape(a5, [self.batch_size, 4, 4, 256])
+        # joint processing
+        a3 = lrelu(linear_msra(concated, 4096, "a3"))
+        a4 = lrelu(linear_msra(a3, 4096, "a4"))
+        a5 = lrelu(linear_msra(a4, 4096, "a5"))
+        a5r = tf.reshape(a5, [self.batch_size, 4, 4, 256])
 
-    # joint convolutional decoder
-    d4 = lrelu(deconv2d_msra(a5r, [self.batch_size, 8, 8, 128],   #8x8
-                             3, 3, 2, 2, "d4"))
-    d4_0 = lrelu(conv2d_msra(d4, 128, 3, 3, 1, 1, "d4_0"))
-    d3 = lrelu(deconv2d_msra(d4_0, [self.batch_size, 16, 16, 64],  #16x16
-                             3, 3, 2, 2, "d3"))
-    num_decode = 0
-    if 'use_color' in self.conf:
-      num_decode += 3
-    if 'use_depth' in self.conf:
-      num_decode += 3
-    d3_0 = lrelu(conv2d_msra(d3, 64*num_decode, 5, 5, 1, 1, "d3_0"))
+        # joint convolutional decoder
+        d4 = lrelu(deconv2d_msra(a5r, [self.batch_size, 8, 8, 128],   #8x8
+                                 3, 3, 2, 2, "d4"))
+        d4_0 = lrelu(conv2d_msra(d4, 128, 3, 3, 1, 1, "d4_0"))
+        d3 = lrelu(deconv2d_msra(d4_0, [self.batch_size, 16, 16, 64],  #16x16
+                                 3, 3, 2, 2, "d3"))
+        num_decode = 0
+        if 'use_color' in self.conf:
+            if 'combination_image' in self.conf:
+                num_decode += 2
+            else: num_decode += 3
+        if 'use_depth' in self.conf:
+            if 'combination_image' in self.conf:
+                num_decode += 2
+            else: num_decode += 3
+        if 'predict_target_masks' in self.conf:
+            num_decode += 2
 
-    #splitting up the representation
-    split_list = tf.split(d3_0, num_decode, axis=3)
+        d3_0 = lrelu(conv2d_msra(d3, 64*num_decode, 5, 5, 1, 1, "d3_0"))
 
-    if 'use_color' in self.conf:
-      self.gen_image1_f = self.decode(split_list.pop(), 'dec_image1_f')
-      self.gen_image1_sep0 = self.decode(split_list.pop(), 'dec_image1_ob0')
-      self.gen_image1_sep1 = self.decode(split_list.pop(), 'dec_image1_ob1')
+        #splitting up the representation
+        split_list = tf.split(d3_0, num_decode, axis=3)
 
-    if 'use_depth' in self.conf:
-      self.gen_dimage1_f = self.decode(split_list.pop(), 'dec_dimage1_f')
-      self.gen_dimage1_sep0 = self.decode(split_list.pop(), 'dec_dimage1_ob0')
-      self.gen_dimage1_sep1 = self.decode(split_list.pop(), 'dec_dimage1_ob1')
+        if 'use_color' in self.conf:
+            self.gen_image1 = self.decode(split_list.pop(), 'dec_image1')
+            self.gen_image1_only0 = self.decode(split_list.pop(), 'dec_image1_only0')
+            self.gen_image1_only1 = self.decode(split_list.pop(), 'dec_image1_only1')
 
-    self.t_vars = tf.trainable_variables()
-    self.saver = tf.train.Saver(max_to_keep=20)
+        if 'use_depth' in self.conf:
+            self.gen_depth1 = self.decode(split_list.pop(), 'dec_dimage1_f', num_outpus=1)
+            self.gen_depth1_only0 = self.decode(split_list.pop(), 'dec_depth1_only0', num_outpus=1)
+            self.gen_depth1_only1 = self.decode(split_list.pop(), 'dec_depth1_only1', num_outpus=1)
+
+        if 'predict_target_masks' in self.conf:
+            self.gen_image1_mask0 = self.decode(split_list.pop(), 'dec_image1_mask0', num_outpus=1)
+            self.gen_image1_mask1 = self.decode(split_list.pop(), 'dec_image1_mask1', num_outpus=1)
+
+        assert split_list == []
+
+        self.t_vars = tf.trainable_variables()
+        self.saver = tf.train.Saver(max_to_keep=20)
+
+    def build_loss(self):
+
+        train_summaries = []
+        val_summaries = []
+
+        self.loss = 0
+        if 'use_color' in self.conf:
+            print 'using color loss'
+            colorloss = 0.
+            if 'combination_image' in self.conf:
+                colorloss += euclidean_loss(self.gen_image1, self.image1)
+
+            if 'masked_image_loss' in self.conf:
+                diff = (self.gen_image1_only0 - self.image1_only0) * self.image1_mask0
+                colorloss += tf.reduce_mean(tf.reduce_sum(tf.pow(diff, 2), 3))
+                diff = (self.gen_image1_only1 - self.image1_only1) * self.image1_mask1
+                colorloss += tf.reduce_mean(tf.reduce_sum(tf.pow(diff, 2), 3))
+            else:
+                colorloss += euclidean_loss(self.gen_image1_only0, self.image1_only0)
+                colorloss += euclidean_loss(self.gen_image1_only1, self.image1_only1)
+
+            train_summaries.append(tf.summary.scalar("colorloss", colorloss))
+            train_summaries.append(tf.summary.scalar("val_colorloss", colorloss))
+            self.loss += colorloss
+
+        if 'use_depth' in self.conf:
+            print 'using color loss'
+            depthloss = 0.
+            depth_factor = self.conf['use_depth']
+            if 'combination_image' in self.conf:
+                depthloss += euclidean_loss(self.gen_depth1, self.depth1)
+
+            if 'masked_image_loss' in self.conf:
+                diff = (self.gen_depth1_only0 - self.depth1_only0) * self.image1_mask0
+                depthloss += tf.reduce_mean(tf.reduce_sum(tf.pow(diff, 2), 3))*depth_factor
+                diff = (self.gen_depth1_only1 - self.depth1_only1) * self.image1_mask1
+                depthloss += tf.reduce_mean(tf.reduce_sum(tf.pow(diff, 2), 3))*depth_factor
+            else:
+                depthloss += euclidean_loss(self.gen_depth1_only0, self.depth1_only0)*depth_factor
+                depthloss += euclidean_loss(self.gen_depth1_only1, self.depth1_only1)*depth_factor
+
+            train_summaries.append(tf.summary.scalar("depthloss", depthloss))
+            train_summaries.append(tf.summary.scalar("val_depthloss", depthloss))
+            self.loss += depthloss
+
+        if 'predict_target_masks' in self.conf:
+            print 'using target mask loss'
+            mask_factor = self.conf['predict_target_masks']
+            mask_loss = 0.
+            mask_loss += euclidean_loss(self.gen_image1_mask0, self.image1_mask0)*mask_factor
+            mask_loss += euclidean_loss(self.gen_image1_mask1, self.image1_mask1)*mask_factor
+            train_summaries.append(tf.summary.scalar("mask_loss", mask_loss))
+            train_summaries.append(tf.summary.scalar("val_mask_loss", mask_loss))
+            self.loss += mask_loss
+
+        train_summaries.append(tf.summary.scalar("total_training_loss", self.loss))
+        val_summaries.append(tf.summary.scalar("total_val_loss", self.loss))
+
+        self.train_op = tf.train.AdamOptimizer(self.conf['learning_rate']).minimize(self.loss)
+
+        self.train_summ_op = tf.summary.merge(train_summaries)
+        self.val_summ_op = tf.summary.merge(val_summaries)
 
 
-  def build_loss(self):
+    def visualize(self, sess):
+        image0, \
+        image0_mask0,\
+        image0_mask1,\
+        image1,\
+        image1_only0,\
+        image1_only1,\
+        image1_mask0,\
+        image1_mask1,\
+        depth0,\
+        depth1,\
+        depth1_only0,\
+        depth1_only1,\
+        displacement,\
+        gen_image1,\
+        gen_image1_only0,\
+        gen_image1_only1,\
+        gen_image1_mask0,\
+        gen_image1_mask1,\
+        gen_depth1,\
+        gen_depth1_only0,\
+        gen_depth1_only1 = sess.run([
+                          ### inputs
+                          self.image0       ,
+                          self.image0_mask0 ,
+                          self.image0_mask1 ,
+                          self.image1       ,
+                          self.image1_only0 ,
+                          self.image1_only1 ,
+                          self.image1_mask0 ,
+                          self.image1_mask1 ,
+                          self.depth0       ,
+                          self.depth1       ,
+                          self.depth1_only0 ,
+                          self.depth1_only1 ,
+                          self.displacement,
+                          ### outputs
+                          self.gen_image1,
+                          self.gen_image1_only0,
+                          self.gen_image1_only1,
+                          self.gen_image1_mask0,
+                          self.gen_image1_mask1,
+                          self.gen_depth1,
+                          self.gen_depth1_only0,
+                          self.gen_depth1_only1,
+                          ],
+                         feed_dict={self.train_cond: 0})
 
-    train_summaries = []
-    val_summaries = []
+        # print 'input'
+        # plt.imshow(image0[0])
+        # plt.show()
+        # print 'gtruth'
+        # plt.imshow(image1[0])
+        # plt.show()
+        #
+        # print 'gen_image'
+        # plt.imshow(gen[0])
+        # plt.show()
 
-    if 'use_color' in self.conf:
-      self.loss = euclidean_loss(self.gen_image1_f, self.image1_f)
-      self.loss += euclidean_loss(self.gen_image1_sep0, self.image1_sep0)
-      self.loss += euclidean_loss(self.gen_image1_sep1, self.image1_sep1)
+        iter_num = re.match('.*?([0-9]+)$', self.conf['visualize']).group(1)
 
-    if 'use_color' in self.conf:
-      self.loss = euclidean_loss(self.gen_dimage1_f, self.dimage1_f)
-      self.loss += euclidean_loss(self.gen_dimage1_sep0, self.dimage1_sep0)
-      self.loss += euclidean_loss(self.gen_dimage1_sep1, self.dimage1_sep1)
-
-    train_summaries.append(tf.summary.scalar("training_loss", self.loss))
-    val_summaries.append(tf.summary.scalar("val_loss", self.loss))
-
-    self.train_op = tf.train.AdamOptimizer(self.conf['learning_rate']).minimize(self.loss)
-
-    self.train_summ_op = tf.summary.merge(train_summaries)
-    self.val_summ_op = tf.summary.merge(val_summaries)
-
-
-  def visualize(self, sess):
-
-    image0, image1, gen, loss, disp, pre_tanh = sess.run([self.image0_f, self.image1_f,
-                                                          self.gen, self.loss, self.disp,
-                                                          self.pre_tanh],
-                                                         feed_dict={self.train_cond: 0})
-
-    print 'loss', loss
-    #
-    # print 'input'
-    # plt.imshow(image0[0])
-    # plt.show()
-    # print 'gtruth'
-    # plt.imshow(image1[0])
-    # plt.show()
-    #
-    # print 'gen_image'
-    # plt.imshow(gen[0])
-    # plt.show()
-
-    iter_num = re.match('.*?([0-9]+)$', self.conf['visualize']).group(1)
-
-    path = self.conf['output_dir']
-    save_images(gen, [8, 8], path + "/output_%s.png" % (iter_num))
-    save_images(np.array(image1), [8, 8],
-                path + '/tr_gt_%s.png' % (iter_num))
-    save_images(np.array(image0), [8, 8],
-                path + '/tr_input_%s.png' % (iter_num))
+        path = self.conf['output_dir']
+        save_images(gen, [8, 8], path + "/output_%s.png" % (iter_num))
+        save_images(np.array(image1), [8, 8],
+                    path + '/tr_gt_%s.png' % (iter_num))
+        save_images(np.array(image0), [8, 8],
+                    path + '/tr_input_%s.png' % (iter_num))
 
 
-global_start_time = time.time()
+        global_start_time = time.time()
+
+

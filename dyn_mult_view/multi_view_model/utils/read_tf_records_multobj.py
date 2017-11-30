@@ -154,6 +154,7 @@ def process_image(features, image_name, single_channel=False):
     image = tf.reshape(image, [1, crop_size, crop_size, COLOR_CHAN])
     image = tf.image.resize_bicubic(image, [IMG_HEIGHT, IMG_WIDTH])
     image = tf.cast(image, tf.float32) / 255.0
+    image = tf.reshape(image, [crop_size, crop_size, COLOR_CHAN])
     return image
 
 
@@ -177,13 +178,11 @@ def check_tfrecs():
 
     print 'testing the reader'
 
-    b = Build_tfrecord_input(conf, training=False)
+    b = Build_tfrecord_input(conf, training=True)
 
     sess = tf.InteractiveSession()
     tf.train.start_queue_runners(sess)
     sess.run(tf.global_variables_initializer())
-
-
 
     for i in range(1):
         print 'run number ', i

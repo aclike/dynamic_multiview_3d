@@ -522,7 +522,7 @@ def write_tf_records(mode, conf, num_examples, mean_abs_displacement):
     arg_list = [[bam_path, model_names_subset, mean_abs_displacement] for _ in range(NUM_PROC)]
 
     ex_per_file = NUM_PROC*IM_PER_PROC
-    num_runs = num_examples/ex_per_file
+    num_runs = int(num_examples/ex_per_file)
 
     ex_index = 0
     assert num_runs > 0
