@@ -144,12 +144,12 @@ class Base_Prediction_Model():
         num_decode = 0
         if 'use_color' in self.conf:
             if 'combination_image' in self.conf:
-                num_decode += 2
-            else: num_decode += 3
+                num_decode += 3
+            else: num_decode += 2
         if 'use_depth' in self.conf:
             if 'combination_image' in self.conf:
-                num_decode += 2
-            else: num_decode += 3
+                num_decode += 3
+            else: num_decode += 2
         if 'predict_target_masks' in self.conf:
             num_decode += 2
 
@@ -159,12 +159,14 @@ class Base_Prediction_Model():
         split_list = tf.split(d3_0, num_decode, axis=3)
 
         if 'use_color' in self.conf:
-            self.gen_image1 = self.decode(split_list.pop(), 'dec_image1')
+            if 'combination_image' in self.conf:
+                self.gen_image1 = self.decode(split_list.pop(), 'dec_image1')
             self.gen_image1_only0 = self.decode(split_list.pop(), 'dec_image1_only0')
             self.gen_image1_only1 = self.decode(split_list.pop(), 'dec_image1_only1')
 
         if 'use_depth' in self.conf:
-            self.gen_depth1 = self.decode(split_list.pop(), 'dec_dimage1_f', num_outpus=1)
+            if 'combination_image' in self.conf:
+                self.gen_depth1 = self.decode(split_list.pop(), 'dec_dimage1_f', num_outpus=1)
             self.gen_depth1_only0 = self.decode(split_list.pop(), 'dec_depth1_only0', num_outpus=1)
             self.gen_depth1_only1 = self.decode(split_list.pop(), 'dec_depth1_only1', num_outpus=1)
 
@@ -203,7 +205,7 @@ class Base_Prediction_Model():
             self.loss += colorloss
 
         if 'use_depth' in self.conf:
-            print 'using color loss'
+            print 'using depth loss'
             depthloss = 0.
             depth_factor = self.conf['use_depth']
             if 'combination_image' in self.conf:
