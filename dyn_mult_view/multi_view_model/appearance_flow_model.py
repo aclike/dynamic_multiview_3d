@@ -82,5 +82,5 @@ class AppearanceFlowModel(Base_Prediction_Model):
                     path + '/tr_input_%s.png' % (iter_num))
 
         plt.axes([0, 0.025, 0.95, 0.95])
-        plt.quiver(pre_resampler[:,:,0],pre_resampler[:,:,1])
-        plt.savefig(path + '/quiver_%s.png' % (iter_num))
+        plt.quiver(pre_resampler[0,:,:,0],pre_resampler[0,:,:,1])
+        plt.savefig(path + '/quiver_%s.pdf' % (iter_num))

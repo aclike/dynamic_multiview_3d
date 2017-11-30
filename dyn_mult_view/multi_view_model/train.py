@@ -16,10 +16,10 @@ from dyn_mult_view.mv3d.utils.tf_utils import load_snapshot
 
 if __name__ == '__main__':
   FLAGS = flags.FLAGS
-  flags.DEFINE_string('hyper', '', 'hyperparameters configuration file')
-  flags.DEFINE_string('visualize', '', 'model within hyperparameter folder from which to create gifs')
-  flags.DEFINE_integer('device', 0, 'the value for CUDA_VISIBLE_DEVICES variable')
-  flags.DEFINE_string('pretrained', None, 'path to model file from which to resume training')
+  flags.DEFINE_string('hyper', '../../tensorflowdata/appflow_firsttry/conf.py', 'hyperparameters configuration file')
+  flags.DEFINE_string('visualize', 'model196002' ,'model within hyperparameter folder from which to create gifs')
+  flags.DEFINE_string('device', '0,2', 'the value for CUDA_VISIBLE_DEVICES variable')
+  flags.DEFINE_string('pretrained', '../../tensorflowdata/appflow_firsttry/modeldata/model84002', 'path to model file from which to resume training')
 
 # How often to record tensorboard summaries.
 SUMMARY_INTERVAL = 400
