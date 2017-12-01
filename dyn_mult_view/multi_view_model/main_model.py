@@ -12,7 +12,8 @@ import matplotlib.pyplot as plt
 class Base_Prediction_Model():
   def __init__(self,
                conf,
-               load_tfrec=True):
+               load_tfrec=True,
+               build_loss = True):
 
     self.conf = conf
     self.batch_size = 64
@@ -49,7 +50,8 @@ class Base_Prediction_Model():
       self.dimage1 = tf.reshape(self.dimage1, [conf['batch_size'], 128, 128, 1])
 
     self.buildModel()
-    self.build_loss()
+    if build_loss:
+      self.build_loss()
 
 
   def image_preprocessing(self, input, scope):

@@ -22,4 +22,5 @@ configuration = {
 'use_color':"",
 'use_depth':1.,
 'combination_image':"",
+'predict_target_masks':0.1,
 }

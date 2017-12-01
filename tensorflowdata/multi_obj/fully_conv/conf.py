@@ -19,7 +19,9 @@ configuration = {
 'batch_size':64,
 'learning_rate':1e-4,
 'train_val_split':0.95,
-'use_color':'',
+'use_color':"",
 'use_depth':1.,
-'masked_image_loss':''
+'combination_image':"",
+'predict_target_masks':0.1,
+'fully_conv':''
 }

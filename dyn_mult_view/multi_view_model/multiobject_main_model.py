@@ -14,9 +14,10 @@ from utils.read_tf_records_multobj import Build_tfrecord_input
 class Base_Prediction_Model():
     def __init__(self,
                  conf,
-                 load_tfrec=True):
+                 load_tfrec=True,
+                 build_loss = True):
         self.conf = conf
-        self.batch_size = 64
+        self.batch_size = conf['batch_size']
         self.image_shape = [128, 128, 3]
         self.scalar_imshape = [128, 128, 1]
 
@@ -72,7 +73,9 @@ class Base_Prediction_Model():
                    val_b.displacement])
 
         self.buildModel()
-        self.build_loss()
+
+        if build_loss:
+            self.build_loss()
 
     def image_preprocessing(self, input, scope):
         with tf.variable_scope(scope):
@@ -100,7 +103,6 @@ class Base_Prediction_Model():
         return gen
 
 
-
     def buildModel(self):
         # convolutional encoder
         concat_list = []
@@ -119,21 +121,30 @@ class Base_Prediction_Model():
         e3_0 = lrelu(conv2d_msra(e3, 128, 3, 3, 1, 1, "e3_0"))
         e4 = lrelu(conv2d_msra(e3_0, 256, 3, 3, 2, 2, "e4"))  #4x4
         e4_0 = lrelu(conv2d_msra(e4, 256, 3, 3, 1, 1, "e4_0"))
-        e4r = tf.reshape(e4_0, [self.batch_size, 4096])
-        e5 = lrelu(linear_msra(e4r, 4096, "fc1"))
 
         # angle processing
         a0 = lrelu(linear_msra(self.displacement, 64, "a0"))
         a1 = lrelu(linear_msra(a0, 64, "a1"))
         a2 = lrelu(linear_msra(a1, 64, "a2"))
 
-        concated = tf.concat(axis=1, values=[e5, a2])
+        if 'fully_conv' in self.conf:
+            smear = tf.reshape(a2, [int(self.batch_size), 1, 1, int(a2.get_shape()[1])])
+            smear = tf.tile(smear, [1, int(e4_0.get_shape()[1]), int(e4_0.get_shape()[2]), 1])
+            concated = tf.concat(axis=3, values=[e4_0, smear])
 
-        # joint processing
-        a3 = lrelu(linear_msra(concated, 4096, "a3"))
-        a4 = lrelu(linear_msra(a3, 4096, "a4"))
-        a5 = lrelu(linear_msra(a4, 4096, "a5"))
-        a5r = tf.reshape(a5, [self.batch_size, 4, 4, 256])
+            e4_1 = lrelu(conv2d_msra(concated, 256, 3, 3, 1, 1, "e4_1"))
+            a5r = lrelu(conv2d_msra(e4_1, 256, 3, 3, 1, 1, "e4_2"))
+        else:
+            e4r = tf.reshape(e4_0, [self.batch_size, 4096])
+            e5 = lrelu(linear_msra(e4r, 4096, "fc1"))
+
+            concated = tf.concat(axis=1, values=[e5, a2])
+
+            # joint processing
+            a3 = lrelu(linear_msra(concated, 4096, "a3"))
+            a4 = lrelu(linear_msra(a3, 4096, "a4"))
+            a5 = lrelu(linear_msra(a4, 4096, "a5"))
+            a5r = tf.reshape(a5, [self.batch_size, 4, 4, 256])
 
         # joint convolutional decoder
         d4 = lrelu(deconv2d_msra(a5r, [self.batch_size, 8, 8, 128],   #8x8
@@ -144,12 +155,14 @@ class Base_Prediction_Model():
         num_decode = 0
         if 'use_color' in self.conf:
             if 'combination_image' in self.conf:
-                num_decode += 3
-            else: num_decode += 2
+                num_decode += 1
+            if 'gen_sep_images' in self.conf:
+                num_decode += 2
         if 'use_depth' in self.conf:
             if 'combination_image' in self.conf:
-                num_decode += 3
-            else: num_decode += 2
+                num_decode += 1
+            if 'gen_sep_images' in self.conf:
+                num_decode += 2
         if 'predict_target_masks' in self.conf:
             num_decode += 2
 
@@ -161,18 +174,29 @@ class Base_Prediction_Model():
         if 'use_color' in self.conf:
             if 'combination_image' in self.conf:
                 self.gen_image1 = self.decode(split_list.pop(), 'dec_image1')
-            self.gen_image1_only0 = self.decode(split_list.pop(), 'dec_image1_only0')
-            self.gen_image1_only1 = self.decode(split_list.pop(), 'dec_image1_only1')
+            else:
+                self.gen_image1 = tf.constant([0])
+            if 'gen_sep_images' in self.conf:
+                self.gen_image1_only0 = self.decode(split_list.pop(), 'dec_image1_only0')
+                self.gen_image1_only1 = self.decode(split_list.pop(), 'dec_image1_only1')
+            else: self.gen_image1_only0, self.gen_image1_only1 = tf.constant([0]), tf.constant([0])
 
         if 'use_depth' in self.conf:
             if 'combination_image' in self.conf:
                 self.gen_depth1 = self.decode(split_list.pop(), 'dec_dimage1_f', num_outpus=1)
-            self.gen_depth1_only0 = self.decode(split_list.pop(), 'dec_depth1_only0', num_outpus=1)
-            self.gen_depth1_only1 = self.decode(split_list.pop(), 'dec_depth1_only1', num_outpus=1)
+            else:
+                self.gen_depth1 = tf.constant([0])  #dummy value
+            if 'gen_sep_images' in self.conf:
+                self.gen_depth1_only0 = self.decode(split_list.pop(), 'dec_depth1_only0', num_outpus=1)
+                self.gen_depth1_only1 = self.decode(split_list.pop(), 'dec_depth1_only1', num_outpus=1)
+            else: self.gen_depth1_only0, self.gen_depth1_only1 = tf.constant([0]), tf.constant([0])
 
         if 'predict_target_masks' in self.conf:
             self.gen_image1_mask0 = self.decode(split_list.pop(), 'dec_image1_mask0', num_outpus=1)
             self.gen_image1_mask1 = self.decode(split_list.pop(), 'dec_image1_mask1', num_outpus=1)
+        else:
+            self.gen_image1_mask0 = tf.constant([0])  #dummy value
+            self.gen_image1_mask1 = tf.constant([0])  # dummy value
 
         assert split_list == []
 
@@ -191,17 +215,18 @@ class Base_Prediction_Model():
             if 'combination_image' in self.conf:
                 colorloss += euclidean_loss(self.gen_image1, self.image1)
 
-            if 'masked_image_loss' in self.conf:
-                diff = (self.gen_image1_only0 - self.image1_only0) * self.image1_mask0
-                colorloss += tf.reduce_mean(tf.reduce_sum(tf.pow(diff, 2), 3))
-                diff = (self.gen_image1_only1 - self.image1_only1) * self.image1_mask1
-                colorloss += tf.reduce_mean(tf.reduce_sum(tf.pow(diff, 2), 3))
-            else:
-                colorloss += euclidean_loss(self.gen_image1_only0, self.image1_only0)
-                colorloss += euclidean_loss(self.gen_image1_only1, self.image1_only1)
+            if 'gen_sep_images' in self.conf:
+                if 'masked_image_loss' in self.conf:
+                    diff = (self.gen_image1_only0 - self.image1_only0) * self.image1_mask0
+                    colorloss += tf.reduce_mean(tf.reduce_sum(tf.pow(diff, 2), 3))
+                    diff = (self.gen_image1_only1 - self.image1_only1) * self.image1_mask1
+                    colorloss += tf.reduce_mean(tf.reduce_sum(tf.pow(diff, 2), 3))
+                else:
+                    colorloss += euclidean_loss(self.gen_image1_only0, self.image1_only0)
+                    colorloss += euclidean_loss(self.gen_image1_only1, self.image1_only1)
 
             train_summaries.append(tf.summary.scalar("colorloss", colorloss))
-            train_summaries.append(tf.summary.scalar("val_colorloss", colorloss))
+            val_summaries.append(tf.summary.scalar("val_colorloss", colorloss))
             self.loss += colorloss
 
         if 'use_depth' in self.conf:
@@ -211,17 +236,18 @@ class Base_Prediction_Model():
             if 'combination_image' in self.conf:
                 depthloss += euclidean_loss(self.gen_depth1, self.depth1)
 
-            if 'masked_image_loss' in self.conf:
-                diff = (self.gen_depth1_only0 - self.depth1_only0) * self.image1_mask0
-                depthloss += tf.reduce_mean(tf.reduce_sum(tf.pow(diff, 2), 3))*depth_factor
-                diff = (self.gen_depth1_only1 - self.depth1_only1) * self.image1_mask1
-                depthloss += tf.reduce_mean(tf.reduce_sum(tf.pow(diff, 2), 3))*depth_factor
-            else:
-                depthloss += euclidean_loss(self.gen_depth1_only0, self.depth1_only0)*depth_factor
-                depthloss += euclidean_loss(self.gen_depth1_only1, self.depth1_only1)*depth_factor
+            if 'gen_sep_images' in self.conf:
+                if 'masked_image_loss' in self.conf:
+                    diff = (self.gen_depth1_only0 - self.depth1_only0) * self.image1_mask0
+                    depthloss += tf.reduce_mean(tf.reduce_sum(tf.pow(diff, 2), 3))*depth_factor
+                    diff = (self.gen_depth1_only1 - self.depth1_only1) * self.image1_mask1
+                    depthloss += tf.reduce_mean(tf.reduce_sum(tf.pow(diff, 2), 3))*depth_factor
+                else:
+                    depthloss += euclidean_loss(self.gen_depth1_only0, self.depth1_only0)*depth_factor
+                    depthloss += euclidean_loss(self.gen_depth1_only1, self.depth1_only1)*depth_factor
 
             train_summaries.append(tf.summary.scalar("depthloss", depthloss))
-            train_summaries.append(tf.summary.scalar("val_depthloss", depthloss))
+            val_summaries.append(tf.summary.scalar("val_depthloss", depthloss))
             self.loss += depthloss
 
         if 'predict_target_masks' in self.conf:
@@ -231,7 +257,7 @@ class Base_Prediction_Model():
             mask_loss += euclidean_loss(self.gen_image1_mask0, self.image1_mask0)*mask_factor
             mask_loss += euclidean_loss(self.gen_image1_mask1, self.image1_mask1)*mask_factor
             train_summaries.append(tf.summary.scalar("mask_loss", mask_loss))
-            train_summaries.append(tf.summary.scalar("val_mask_loss", mask_loss))
+            val_summaries.append(tf.summary.scalar("val_mask_loss", mask_loss))
             self.loss += mask_loss
 
         train_summaries.append(tf.summary.scalar("total_training_loss", self.loss))
@@ -301,17 +327,121 @@ class Base_Prediction_Model():
         # print 'gen_image'
         # plt.imshow(gen[0])
         # plt.show()
+        for b in range(10):
+            print 'input', b
+            fig1 = plt.figure()
+
+            plt.subplot(3, 3, 1)
+            plt.imshow(image0[b])
+            plt.axis('off')
+
+            plt.subplot(3, 3, 4)
+            plt.imshow(image1[b])
+            plt.axis('off')
+
+            plt.subplot(3, 3, 5)
+            plt.imshow(image1_only0[b])
+            plt.axis('off')
+
+            plt.subplot(3, 3, 6)
+            plt.imshow(image1_only1[b])
+            plt.axis('off')
+
+            if 'combination_image' in self.conf:
+                plt.subplot(3, 3, 7)
+                plt.imshow(gen_image1[b])
+                plt.axis('off')
+
+            plt.subplot(3, 3, 8)
+            plt.imshow(gen_image1_only0[b])
+            plt.axis('off')
+
+            plt.subplot(3, 3, 9)
+            plt.imshow(gen_image1_only1[b])
+            plt.axis('off')
+
+            plt.draw()
+            fig2 = plt.figure()
+
+            ## depth
+            plt.subplot(3, 3, 1)
+            plt.imshow(np.squeeze(depth0[b]))
+            plt.axis('off')
+
+            plt.subplot(3, 3, 4)
+            plt.imshow(np.squeeze(depth1[b]))
+            plt.axis('off')
+
+            plt.subplot(3, 3, 5)
+            plt.imshow(np.squeeze(depth1_only0[b]))
+            plt.axis('off')
+
+            plt.subplot(3, 3, 6)
+            plt.imshow(np.squeeze(depth1_only1[b]))
+            plt.axis('off')
+
+            if 'combination_image' in self.conf:
+                plt.subplot(3, 3, 7)
+                plt.imshow(np.squeeze(gen_depth1[b]))
+                plt.axis('off')
+
+            plt.subplot(3, 3, 8)
+            plt.imshow(np.squeeze(gen_depth1_only0[b]))
+            plt.axis('off')
+
+            plt.subplot(3, 3, 9)
+            plt.imshow(np.squeeze(gen_depth1_only1[b]))
+            plt.axis('off')
+
+            plt.draw()
+
+            if 'predict_target_masks' in self.conf:
+                rows = 2
+            else:
+                rows = 1
+
+            fig3 = plt.figure()
+            iplt = 0
+            iplt += 1
+            plt.subplot(rows, 4, iplt)
+            plt.imshow(np.squeeze(image0_mask0[b]))
+            plt.axis('off')
+
+            iplt += 1
+            plt.subplot(rows, 4, iplt)
+            plt.imshow(np.squeeze(image0_mask1[b]))
+            plt.axis('off')
+
+            iplt += 1
+            plt.subplot(rows, 4, iplt)
+            plt.imshow(np.squeeze(image1_mask0[b]))
+            plt.axis('off')
+
+            iplt += 1
+            plt.subplot(rows, 4, iplt)
+            plt.imshow(np.squeeze(image1_mask1[b]))
+            plt.axis('off')
+
+            if 'predict_target_masks' in self.conf:
+                plt.subplot(rows, 4, 7)
+                plt.imshow(np.squeeze(image1_mask0[b]))
+                plt.axis('off')
+
+                plt.subplot(rows, 4, 8)
+                plt.imshow(np.squeeze(image1_mask1[b]))
+                plt.axis('off')
+
+            save_images = True
+            if save_images:
+                fig1.savefig(self.conf['output_dir']+'/img_exp{}'.format(b))
+                fig2.savefig(self.conf['output_dir'] + '/depth_exp{}'.format(b))
+                fig3.savefig(self.conf['output_dir'] + '/masks_exp{}'.format(b))
+            else:
+                plt.show()
 
         iter_num = re.match('.*?([0-9]+)$', self.conf['visualize']).group(1)
 
-        path = self.conf['output_dir']
-        save_images(gen, [8, 8], path + "/output_%s.png" % (iter_num))
-        save_images(np.array(image1), [8, 8],
-                    path + '/tr_gt_%s.png' % (iter_num))
-        save_images(np.array(image0), [8, 8],
-                    path + '/tr_input_%s.png' % (iter_num))
+        return
 
-
-        global_start_time = time.time()
 
 

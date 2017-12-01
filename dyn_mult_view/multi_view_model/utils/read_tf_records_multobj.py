@@ -42,7 +42,7 @@ class Build_tfrecord_input():
         else:
             shuffle = True
 
-        print 'shuffle', True
+        print 'shuffle',shuffle
 
         filename_queue = tf.train.string_input_producer(filenames, shuffle=shuffle)
         reader = tf.TFRecordReader()
