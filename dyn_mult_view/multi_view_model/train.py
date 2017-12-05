@@ -16,9 +16,9 @@ from dyn_mult_view.mv3d.utils.tf_utils import load_snapshot
 
 if __name__ == '__main__':
     FLAGS = flags.FLAGS
-    flags.DEFINE_string('hyper', '', 'hyperparameters configuration file')
+    flags.DEFINE_string('hyper', '../../tensorflowdata/appflow_offset/conf.py', 'hyperparameters configuration file')
     flags.DEFINE_string('visualize', '', 'model within hyperparameter folder from which to create gifs')
-    flags.DEFINE_integer('device', 0, 'the value for CUDA_VISIBLE_DEVICES variable')
+    flags.DEFINE_string('device', '0', 'the value for CUDA_VISIBLE_DEVICES variable')
     flags.DEFINE_string('pretrained', None, 'path to model file from which to resume training')
 
 # How often to record tensorboard summaries.
@@ -55,7 +55,7 @@ def main():
         conf['test_mode'] = ''
 
     if 'model' in conf:
-        Model = conf['model']
+        Model = conf['model']	
     else:
         Model = Base_Prediction_Model
 
@@ -63,8 +63,7 @@ def main():
         model = Model(conf, load_tfrec=True, build_loss = False)
     else:
         model = Model(conf, load_tfrec=True, build_loss=True)
-
-
+    
     print 'Constructing saver.'
     # Make saver.
 

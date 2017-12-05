@@ -1,4 +1,4 @@
-from main_model import Base_Prediction_Model
+from base_model import Base_AppFlow_Model
 from dyn_mult_view.mv3d.utils.tf_utils import *
 import tensorflow as tf
 import matplotlib.pyplot as plt
@@ -8,7 +8,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 from matplotlib.patches import ConnectionPatch
 
-class AppearanceFlowModel(Base_Prediction_Model):
+class AppearanceFlowModel(Base_AppFlow_Model):
 
     def buildModel(self):
         image0 = self.image0
@@ -56,8 +56,15 @@ class AppearanceFlowModel(Base_Prediction_Model):
         d1_0 = lrelu(conv2d_msra(d1, 32, 5, 5, 1, 1, "d1_0"))
 
         # Appearance flow layers. We can maybe change these parameters at some point. The appearance flow paper has this deconv layer as kernel 3, stride 1, pad 1.
-        self.pre_resampler = deconv2d_msra(d1_0, [self.batch_size, 128, 128, 2], 5, 5, 2, 2, "warp_pts")
-        self.gen = tf.contrib.resampler.resampler(image0, self.pre_resampler)
+        self.flow_field = deconv2d_msra(d1_0, [self.batch_size, 128, 128, 2], 5, 5, 2, 2, "flow_field")
+        x = tf.cast(tf.range(128), tf.float32)
+        y = tf.cast(tf.range(128), tf.float32)
+
+        X,Y = tf.meshgrid(x,y)
+        offsets = tf.tile(tf.expand_dims(tf.stack((Y,X), axis=2), axis=0), tf.constant([64,1,1,1]))
+        with tf.variable_scope("warp_pts"):
+            self.warp_pts = self.flow_field + offsets
+        self.gen = tf.contrib.resampler.resampler(image0, self.warp_pts)
 
         self.loss = euclidean_loss(self.gen, gtruth_image)
         self.training_summ = tf.summary.scalar("training_loss", self.loss)
@@ -73,18 +80,18 @@ class AppearanceFlowModel(Base_Prediction_Model):
                                  feed_dict={self.train_cond: 0})
 
         print 'loss', loss
-	print pre_resampler
-	print 'max resample coord:', np.max(pre_resampler)
+    	print pre_resampler
+    	print 'max resample coord:', np.max(pre_resampler)
         iter_num = re.match('.*?([0-9]+)$', self.conf['visualize']).group(1)
 
         path = self.conf['output_dir']
         save_images(gen, [8, 8], path + "/output_%s.png" % (iter_num))
         save_images(np.array(image1), [8, 8],
-                    path + '/tr_gt_%s.png' % (iter_num))
+                        path + '/tr_gt_%s.png' % (iter_num))
         save_images(np.array(image0), [8, 8],
-                    path + '/tr_input_%s.png' % (iter_num))
+                        path + '/tr_input_%s.png' % (iter_num))
 
-	plt.figure()
+    	plt.figure()
         plt.axes([0, 0.025, 0.95, 0.95])
         plt.quiver(pre_resampler[0,:,:,0],pre_resampler[0,:,:,1])
         plt.savefig(path + '/quiver_%s.pdf' % (iter_num))
@@ -111,5 +118,5 @@ class AppearanceFlowModel(Base_Prediction_Model):
         ax1.set_ylim(0, 128)
         ax2.set_xlim(0, 128)
         ax2.set_ylim(0, 128)
- 	plt.draw()
- 	plt.savefig(path + '/corr_plot_%s.pdf' % (iter_num))
+     	plt.draw()
+     	plt.savefig(path + '/corr_plot_%s.pdf' % (iter_num))
