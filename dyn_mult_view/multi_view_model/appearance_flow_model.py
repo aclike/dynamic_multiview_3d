@@ -95,8 +95,8 @@ class AppearanceFlowModel(Base_Prediction_Model):
 	ax1.imshow(image0[0])
 	ax2.imshow(gen[0])
 
-	coordsA="data"
-	coordsB="data"
+	coordsA = "data"
+	coordsB = "data"
 	# random pts 
 	num_samples = 30
 	pts_output = np.random.randint(40, 88, size=(num_samples,2))
