@@ -1,4 +1,4 @@
-from main_model import Base_Prediction_Model
+from base_model import Base_Prediction_Model
 from dyn_mult_view.mv3d.utils.tf_utils import *
 import tensorflow as tf
 import matplotlib.pyplot as plt
@@ -79,43 +79,43 @@ class AppearanceFlowModel(Base_Prediction_Model):
                                  feed_dict={self.train_cond: 0})
 
         print 'loss', loss
-	print pre_resampler
-	print 'max resample coord:', np.max(pre_resampler)
-        iter_num = re.match('.*?([0-9]+)$', self.conf['visualize']).group(1)
+    	print pre_resampler
+    	print 'max resample coord:', np.max(pre_resampler)
+            iter_num = re.match('.*?([0-9]+)$', self.conf['visualize']).group(1)
 
-        path = self.conf['output_dir']
-        save_images(gen, [8, 8], path + "/output_%s.png" % (iter_num))
-        save_images(np.array(image1), [8, 8],
-                    path + '/tr_gt_%s.png' % (iter_num))
-        save_images(np.array(image0), [8, 8],
-                    path + '/tr_input_%s.png' % (iter_num))
+            path = self.conf['output_dir']
+            save_images(gen, [8, 8], path + "/output_%s.png" % (iter_num))
+            save_images(np.array(image1), [8, 8],
+                        path + '/tr_gt_%s.png' % (iter_num))
+            save_images(np.array(image0), [8, 8],
+                        path + '/tr_input_%s.png' % (iter_num))
 
-	plt.figure()
-        plt.axes([0, 0.025, 0.95, 0.95])
-        plt.quiver(pre_resampler[0,:,:,0],pre_resampler[0,:,:,1])
-        plt.savefig(path + '/quiver_%s.pdf' % (iter_num))
-	
-	plt.figure()
-	ax1 = plt.subplot(121)
-	ax2 = plt.subplot(122)
-	ax1.imshow(image0[0])
-	ax2.imshow(gen[0])
+    	plt.figure()
+            plt.axes([0, 0.025, 0.95, 0.95])
+            plt.quiver(pre_resampler[0,:,:,0],pre_resampler[0,:,:,1])
+            plt.savefig(path + '/quiver_%s.pdf' % (iter_num))
+    	
+    	plt.figure()
+    	ax1 = plt.subplot(121)
+    	ax2 = plt.subplot(122)
+    	ax1.imshow(image0[0])
+    	ax2.imshow(gen[0])
 
-	coordsA="data"
-	coordsB="data"
-	# random pts 
-	num_samples = 30
-	pts_output = np.random.randint(40, 88, size=(num_samples,2))
-	for pt_output in pts_output:
-	    sampled_location = pre_resampler[0,pt_output[0],pt_output[1],:].astype('uint32')
-	    print pt_output, sampled_location
-	    con = ConnectionPatch(xyA=np.flip(pt_output,0), xyB=np.flip(sampled_location,0), coordsA=coordsA, coordsB=coordsB,
-                     axesA=ax2, axesB=ax1,
-                     arrowstyle="<->",shrinkB=5)
-   	    ax2.add_artist(con)
-	ax1.set_xlim(0, 128)
-        ax1.set_ylim(0, 128)
-        ax2.set_xlim(0, 128)
-        ax2.set_ylim(0, 128)
- 	plt.draw()
- 	plt.savefig(path + '/corr_plot_%s.pdf' % (iter_num))
+    	coordsA="data"
+    	coordsB="data"
+    	# random pts 
+    	num_samples = 30
+    	pts_output = np.random.randint(40, 88, size=(num_samples,2))
+    	for pt_output in pts_output:
+    	    sampled_location = pre_resampler[0,pt_output[0],pt_output[1],:].astype('uint32')
+    	    print pt_output, sampled_location
+    	    con = ConnectionPatch(xyA=np.flip(pt_output,0), xyB=np.flip(sampled_location,0), coordsA=coordsA, coordsB=coordsB,
+                         axesA=ax2, axesB=ax1,
+                         arrowstyle="<->",shrinkB=5)
+       	    ax2.add_artist(con)
+    	ax1.set_xlim(0, 128)
+            ax1.set_ylim(0, 128)
+            ax2.set_xlim(0, 128)
+            ax2.set_ylim(0, 128)
+     	plt.draw()
+     	plt.savefig(path + '/corr_plot_%s.pdf' % (iter_num))
