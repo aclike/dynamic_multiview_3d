@@ -56,8 +56,14 @@ class AppearanceFlowModel(Base_Prediction_Model):
         d1_0 = lrelu(conv2d_msra(d1, 32, 5, 5, 1, 1, "d1_0"))
 
         # Appearance flow layers. We can maybe change these parameters at some point. The appearance flow paper has this deconv layer as kernel 3, stride 1, pad 1.
-        self.pre_resampler = deconv2d_msra(d1_0, [self.batch_size, 128, 128, 2], 5, 5, 2, 2, "warp_pts")
-        self.gen = tf.contrib.resampler.resampler(image0, self.pre_resampler)
+        self.flow_field = deconv2d_msra(d1_0, [self.batch_size, 128, 128, 2], 5, 5, 2, 2, "flow_field")
+        x = tf.range(128)
+        y = tf.range(128)
+        X,Y = tf.meshgrid(x,y)
+        offsets = tf.tile(tf.expand_dims(tf.stack((Y,X), axis=2), axis=0), tf.constant([64,1,1,1]))
+        with tf.variable_scope("warp_pts"):
+            self.warp_pts = self.flow_field + offsets
+        self.gen = tf.contrib.resampler.resampler(image0, self.warp_pts)
 
         self.loss = euclidean_loss(self.gen, gtruth_image)
         self.training_summ = tf.summary.scalar("training_loss", self.loss)
