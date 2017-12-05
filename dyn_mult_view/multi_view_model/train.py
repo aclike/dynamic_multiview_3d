@@ -47,7 +47,7 @@ def main():
   if FLAGS.visualize:
     print 'creating visualizations ...'
 
-    conf['data_dir'] = '/'.join(str.split(conf['data_dir'], '/')[:-1] + ['test'])
+    conf['data_dir'] = '/'.join(str.split(conf['data_dir'], '/')[:-1] + ['train'])
 
     conf['visualize'] = conf['output_dir'] + '/' + FLAGS.visualize
     conf['event_log_dir'] = '/tmp'
