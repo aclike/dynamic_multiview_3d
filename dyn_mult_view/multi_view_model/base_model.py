@@ -16,7 +16,7 @@ class Base_AppFlow_Model():
 	       build_loss=True):
 
     self.conf = conf
-    self.batch_size = 64
+    self.batch_size = conf['batch_size']
     self.image_shape = [128, 128, 3]
     self.max_iter = 1000000
     self.start_iter = 0

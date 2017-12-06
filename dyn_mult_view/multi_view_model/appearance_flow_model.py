@@ -10,6 +10,11 @@ from matplotlib.patches import ConnectionPatch
 
 class AppearanceFlowModel(Base_AppFlow_Model):
 
+    def decodeAngle(self):
+	a0 = lrelu(linear_msra(self.disp, 64, "a0"))
+        a1 = lrelu(linear_msra(a0, 64, "a1"))
+        return lrelu(linear_msra(a1, 64, "a2"))
+
     def buildModel(self):
         image0 = self.image0
         gtruth_image = self.image1
@@ -29,11 +34,7 @@ class AppearanceFlowModel(Base_AppFlow_Model):
         e5 = lrelu(linear_msra(e4r, 4096, "fc1"))
 
         # angle processing
-        a0 = lrelu(linear_msra(self.disp, 64, "a0"))
-        a1 = lrelu(linear_msra(a0, 64, "a1"))
-        a2 = lrelu(linear_msra(a1, 64, "a2"))
-
-        concated = tf.concat(axis=1, values=[e5, a2])
+        concated = tf.concat(axis=1, values=[e5, self.decodeAngle()])
 
         # joint processing
         a3 = lrelu(linear_msra(concated, 4096, "a3"))
@@ -61,7 +62,7 @@ class AppearanceFlowModel(Base_AppFlow_Model):
         y = tf.cast(tf.range(128), tf.float32)
 
         X,Y = tf.meshgrid(x,y)
-        offsets = tf.tile(tf.expand_dims(tf.stack((Y,X), axis=2), axis=0), tf.constant([64,1,1,1]))
+        offsets = tf.tile(tf.expand_dims(tf.stack((Y,X), axis=2), axis=0), tf.constant([self.batch_size,1,1,1]))
         with tf.variable_scope("warp_pts"):
             self.warp_pts = self.flow_field + offsets
         self.gen = tf.contrib.resampler.resampler(image0, self.warp_pts)
@@ -74,14 +75,14 @@ class AppearanceFlowModel(Base_AppFlow_Model):
 
     def visualize(self, sess):
 
-        image0, image1, gen, loss, disp, pre_resampler = sess.run([self.image0, self.image1,
+        image0, image1, gen, loss, disp, warp_pts = sess.run([self.image0, self.image1,
                                                     self.gen, self.loss, self.disp,
-                                                    self.pre_resampler],
+                                                    self.warp_pts],
                                  feed_dict={self.train_cond: 0})
 
         print 'loss', loss
-    	print pre_resampler
-    	print 'max resample coord:', np.max(pre_resampler)
+    	print warp_pts
+    	print 'max resample coord:', np.max(warp_pts)
         iter_num = re.match('.*?([0-9]+)$', self.conf['visualize']).group(1)
 
         path = self.conf['output_dir']
@@ -93,7 +94,7 @@ class AppearanceFlowModel(Base_AppFlow_Model):
 
     	plt.figure()
         plt.axes([0, 0.025, 0.95, 0.95])
-        plt.quiver(pre_resampler[0,:,:,0],pre_resampler[0,:,:,1])
+        plt.quiver(warp_pts[0,:,:,0],warp_pts[0,:,:,1])
         plt.savefig(path + '/quiver_%s.pdf' % (iter_num))
 	
 	plt.figure()
@@ -105,10 +106,10 @@ class AppearanceFlowModel(Base_AppFlow_Model):
 	coordsA = "data"
 	coordsB = "data"
 	# random pts 
-	num_samples = 30
-	pts_output = np.random.randint(40, 88, size=(num_samples,2))
+	num_samples = 6
+	pts_output = np.random.randint(50, 78, size=(num_samples,2))
 	for pt_output in pts_output:
-	    sampled_location = pre_resampler[0,pt_output[0],pt_output[1],:].astype('uint32')
+	    sampled_location = warp_pts[0,pt_output[0],pt_output[1],:].astype('uint32')
 	    print pt_output, sampled_location
 	    con = ConnectionPatch(xyA=np.flip(pt_output,0), xyB=np.flip(sampled_location,0), coordsA=coordsA, coordsB=coordsB,
                      axesA=ax2, axesB=ax1,
