@@ -1,4 +1,11 @@
+import time
+import os
+import sys
+
 from dyn_mult_view.mv3d.utils.tf_utils import *
+from dyn_mult_view.multi_view_model.utils.read_tf_records import build_tfrecord_input
+import dyn_mult_view.mv3d.utils.realtime_renderer as rtr
+
 import tensorflow as tf
 import matplotlib.pyplot as plt
 import pdb
@@ -118,7 +125,7 @@ class AppearanceFlowModel():
         self.flow_field = deconv2d_msra(d1_0, [self.batch_size, 128, 128, 2], 5, 5, 2, 2, "flow_field")
         with tf.variable_scope("warp_pts"):
             img_shape = tf.shape(image0)
-            self.warp_pts = self.flow_field + coords(img_shape[0], img_shape[1], self.batch_size)
+            self.warp_pts = self.flow_field + coords(img_shape[1], img_shape[2], self.batch_size)
         self.gen = tf.contrib.resampler.resampler(image0, self.warp_pts)
 
         self.t_vars = tf.trainable_variables()
