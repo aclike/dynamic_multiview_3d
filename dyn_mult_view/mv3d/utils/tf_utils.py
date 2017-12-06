@@ -22,6 +22,9 @@ def euclidean_loss(input1, input2):
 def l1_loss(input1, input2):
     return tf.reduce_mean(tf.reduce_sum(tf.abs(tf.subtract(input1, input2)), 3))
 
+def relu(x, name="relu"):
+    with tf.variable_scope(name):
+        return 0.5 * x + 0.5 * abs(x)
 
 def lrelu(x, leak=0.2, name="lrelu"):
     with tf.variable_scope(name):
@@ -29,6 +32,21 @@ def lrelu(x, leak=0.2, name="lrelu"):
         f2 = 0.5 * (1 - leak)
         return f1 * x + f2 * abs(x)
 
+def appflow_means(im_shape):
+    ones = np.ones(im_shape)
+    ones[:,:,0] *= 104
+    ones[:,:,1] *= 117
+    ones[:,:,2] *= 123
+    return tf.convert_to_tensor(ones)
+
+def coords(h, w, batch_size, name="coords"):
+    with tf.variable_scope(name):
+        y = tf.cast(tf.range(h), tf.float32)
+        x = tf.cast(tf.range(w), tf.float32)
+
+        X,Y = tf.meshgrid(x,y)
+        coords = tf.tile(tf.expand_dims(tf.stack((Y,X), axis=2), axis=0), tf.constant([batch_size,1,1,1]))
+        return coords
 
 def linear_msra(input_, output_size, name):
     msra_coeff = 1.0

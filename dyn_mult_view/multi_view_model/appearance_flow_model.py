@@ -1,4 +1,3 @@
-from base_model import Base_AppFlow_Model
 from dyn_mult_view.mv3d.utils.tf_utils import *
 import tensorflow as tf
 import matplotlib.pyplot as plt
@@ -8,12 +7,71 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
 from matplotlib.patches import ConnectionPatch
 
-class AppearanceFlowModel(Base_AppFlow_Model):
+class AppearanceFlowModel():
+
+    def __init__(self,
+               conf,
+               load_tfrec=True,
+               build_loss=True):
+
+        self.conf = conf
+        self.batch_size = conf['batch_size']
+        self.image_shape = [128, 128, 3]
+        self.max_iter = 1000000
+        self.start_iter = 0
+
+        self.train_cond = tf.placeholder(tf.int32, shape=[], name="train_cond")
+
+        if not load_tfrec:
+          # pairs of images: the first one is the starting image the second is the image which
+          # shall be inferred
+            self.images = tf.placeholder(tf.float32,
+                                       [self.batch_size, 2] + self.image_shape,
+                                       name='input_images')
+
+            self.depth_images = tf.placeholder(tf.float32,
+                                       [self.batch_size, 2] + self.image_shape,
+                                       name='input_images')
+
+            self.disp = tf.placeholder(tf.float32, [self.batch_size, 5],
+                                       name='labels')
+
+        else:
+            train_image0, train_image1, train_depth_image0, train_depth_image1, train_disp = build_tfrecord_input(conf, training=True)
+            test_image0, test_image1, test_depth_image0, test_depth_image1, test_disp = build_tfrecord_input(conf, training=False)
+
+            self.image0, self.image1, self.depth_image0, self.depth_image1, self.disp = tf.cond(self.train_cond > 0,  # if 1 use trainigbatch else validation batch
+                                          lambda: [train_image0, train_image1, train_depth_image0, train_depth_image1, train_disp],
+                                          lambda: [test_image0, test_image1, test_depth_image0, test_depth_image1, test_disp])
+            self.image0 = tf.reshape(self.image0, [conf['batch_size'], 128, 128, 3])
+            self.image1 = tf.reshape(self.image1, [conf['batch_size'], 128, 128, 3])
+            self.depth_image0 = tf.reshape(self.depth_image0, [conf['batch_size'], 128, 128, 1])
+            self.depth_image1 = tf.reshape(self.depth_image1, [conf['batch_size'], 128, 128, 1])
+
+            self.buildModel()
+            if build_loss:
+                self.build_loss()
+
 
     def decodeAngle(self):
-	a0 = lrelu(linear_msra(self.disp, 64, "a0"))
+        a0 = lrelu(linear_msra(self.disp, 64, "a0"))
         a1 = lrelu(linear_msra(a0, 64, "a1"))
         return lrelu(linear_msra(a1, 64, "a2"))
+
+    def build_loss(self):
+
+        train_summaries = []
+        val_summaries = []
+
+        self.loss = euclidean_loss(self.gen, self.image1)
+        train_summaries.append(tf.summary.scalar("training_loss", self.loss))
+        val_summaries.append(tf.summary.scalar("val_loss", self.loss))
+
+        self.train_op = tf.train.AdamOptimizer(self.conf['learning_rate']).minimize(self.loss)
+
+        self.train_summ_op = tf.summary.merge(train_summaries)
+        self.val_summ_op = tf.summary.merge(val_summaries)
+
 
     def buildModel(self):
         image0 = self.image0
@@ -58,17 +116,10 @@ class AppearanceFlowModel(Base_AppFlow_Model):
 
         # Appearance flow layers. We can maybe change these parameters at some point. The appearance flow paper has this deconv layer as kernel 3, stride 1, pad 1.
         self.flow_field = deconv2d_msra(d1_0, [self.batch_size, 128, 128, 2], 5, 5, 2, 2, "flow_field")
-        x = tf.cast(tf.range(128), tf.float32)
-        y = tf.cast(tf.range(128), tf.float32)
-
-        X,Y = tf.meshgrid(x,y)
-        offsets = tf.tile(tf.expand_dims(tf.stack((Y,X), axis=2), axis=0), tf.constant([self.batch_size,1,1,1]))
         with tf.variable_scope("warp_pts"):
-            self.warp_pts = self.flow_field + offsets
+            img_shape = tf.shape(image0)
+            self.warp_pts = self.flow_field + coords(img_shape[0], img_shape[1], self.batch_size)
         self.gen = tf.contrib.resampler.resampler(image0, self.warp_pts)
-
-        self.loss = euclidean_loss(self.gen, gtruth_image)
-        self.training_summ = tf.summary.scalar("training_loss", self.loss)
 
         self.t_vars = tf.trainable_variables()
         self.saver = tf.train.Saver(max_to_keep=20)
@@ -81,8 +132,8 @@ class AppearanceFlowModel(Base_AppFlow_Model):
                                  feed_dict={self.train_cond: 0})
 
         print 'loss', loss
-    	print warp_pts
-    	print 'max resample coord:', np.max(warp_pts)
+        print warp_pts
+        print 'max resample coord:', np.max(warp_pts)
         iter_num = re.match('.*?([0-9]+)$', self.conf['visualize']).group(1)
 
         path = self.conf['output_dir']
@@ -92,32 +143,32 @@ class AppearanceFlowModel(Base_AppFlow_Model):
         save_images(np.array(image0), [8, 8],
                         path + '/tr_input_%s.png' % (iter_num))
 
-    	plt.figure()
+        plt.figure()
         plt.axes([0, 0.025, 0.95, 0.95])
         plt.quiver(warp_pts[0,:,:,0],warp_pts[0,:,:,1])
         plt.savefig(path + '/quiver_%s.pdf' % (iter_num))
-	
-	plt.figure()
-	ax1 = plt.subplot(121)
-	ax2 = plt.subplot(122)
-	ax1.imshow(image0[0])
-	ax2.imshow(gen[0])
+    
+        plt.figure()
+        ax1 = plt.subplot(121)
+        ax2 = plt.subplot(122)
+        ax1.imshow(image0[0])
+        ax2.imshow(gen[0])
 
-	coordsA = "data"
-	coordsB = "data"
-	# random pts 
-	num_samples = 6
-	pts_output = np.random.randint(50, 78, size=(num_samples,2))
-	for pt_output in pts_output:
-	    sampled_location = warp_pts[0,pt_output[0],pt_output[1],:].astype('uint32')
-	    print pt_output, sampled_location
-	    con = ConnectionPatch(xyA=np.flip(pt_output,0), xyB=np.flip(sampled_location,0), coordsA=coordsA, coordsB=coordsB,
-                     axesA=ax2, axesB=ax1,
-                     arrowstyle="<->",shrinkB=5)
-   	    ax2.add_artist(con)
-	ax1.set_xlim(0, 128)
+        coordsA = "data"
+        coordsB = "data"
+        # random pts 
+        num_samples = 6
+        pts_output = np.random.randint(50, 78, size=(num_samples,2))
+        for pt_output in pts_output:
+            sampled_location = warp_pts[0,pt_output[0],pt_output[1],:].astype('uint32')
+            print pt_output, sampled_location
+            con = ConnectionPatch(xyA=np.flip(pt_output,0), xyB=np.flip(sampled_location,0), coordsA=coordsA, coordsB=coordsB,
+                         axesA=ax2, axesB=ax1,
+                         arrowstyle="<->",shrinkB=5)
+            ax2.add_artist(con)
+        ax1.set_xlim(0, 128)
         ax1.set_ylim(0, 128)
         ax2.set_xlim(0, 128)
         ax2.set_ylim(0, 128)
-     	plt.draw()
-     	plt.savefig(path + '/corr_plot_%s.pdf' % (iter_num))
+        plt.draw()
+        plt.savefig(path + '/corr_plot_%s.pdf' % (iter_num))
