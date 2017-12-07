@@ -42,11 +42,8 @@ class AppearanceFlowTinghui(AppearanceFlowModel):
 
         # Appearance flow layers. We can maybe change these parameters at some point. The appearance flow paper has this deconv layer as kernel 3, stride 1, pad 1.
         self.flow_field = deconv2d_msra(d0, [self.batch_size, 128, 128, 2], 3, 3, 1, 1, "flow_field")
-
-        with tf.variable_scope("warp_pts"):
-            img_shape = tf.shape(image0)
-            self.warp_pts = self.flow_field + coords(img_shape[1], img_shape[2], self.batch_size)
-        self.gen = tf.contrib.resampler.resampler(image0, self.warp_pts)
+        self.warp_pts = warp_pts_layer(self.flow_field)
+        self.gen = resample_layer(image0, self.warp_pts)
 
         self.t_vars = tf.trainable_variables()
         self.saver = tf.train.Saver(max_to_keep=20)
