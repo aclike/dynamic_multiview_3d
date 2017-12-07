@@ -46,7 +46,9 @@ def coords(h, w, batch_size):
     x = tf.cast(tf.range(w), tf.float32)
 
     X,Y = tf.meshgrid(x,y)
-    coords = tf.tile(tf.expand_dims(tf.stack((Y,X), axis=2), axis=0), tf.constant([batch_size,1,1,1]))
+    partial_tile_shape = tf.constant([1,1,1])
+    tile_shape = tf.concat([tf.reshape(batch_size, [-1]), partial_tile_shape], 0)
+    coords = tf.tile(tf.expand_dims(tf.stack((Y,X), axis=2), axis=0), tile_shape)
     return coords
 
 def linear_msra(input_, output_size, name):

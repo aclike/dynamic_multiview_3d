@@ -97,7 +97,7 @@ class MultiObjectAppFlow():
                                      5, 5, 2, 2, "d1"))
             d1_0 = lrelu(conv2d_msra(d1, 32, 5, 5, 1, 1, "d1_0"))
 
-            flow_field = deconv2d_msra(d1_0, [self.batch_size, 128, 128, flow_field_channels], 5, 5, 1, 1, "d0")
+            flow_field = deconv2d_msra(d1_0, [self.batch_size, 128, 128, flow_field_channels], 5, 5, 2, 2, "d0")
             warp_pts = warp_pts_layer(flow_field)
             gen = resample_layer(src_img, warp_pts)
 
