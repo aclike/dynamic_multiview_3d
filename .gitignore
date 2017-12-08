@@ -126,3 +126,5 @@ test
 shapenet_output/
 
 bam_path
+
+out_images/

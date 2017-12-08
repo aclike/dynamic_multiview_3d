@@ -5,7 +5,7 @@ import sys
 import dyn_mult_view.mv3d.utils.realtime_renderer as rtr
 from dyn_mult_view.mv3d.utils.tf_utils import *
 from dyn_mult_view.multi_view_model.utils.read_tf_records import build_tfrecord_input
-
+import cPickle
 import pdb
 import matplotlib.pyplot as plt
 
@@ -327,7 +327,58 @@ class Base_Prediction_Model():
         # print 'gen_image'
         # plt.imshow(gen[0])
         # plt.show()
-        for b in range(10):
+
+        image0 = np.clip(image0, 0., 1.)
+        image0_mask0 = np.clip(image0_mask0, 0., 1.)
+        image0_mask1 = np.clip(image0_mask1, 0., 1.)
+        image1 = np.clip(image1, 0., 1.)
+        image1_only0 = np.clip(image1_only0, 0., 1.)
+        image1_only1 = np.clip(image1_only1, 0., 1.)
+        image1_mask0 = np.clip(image1_mask0, 0., 1.)
+        image1_mask1 = np.clip(image1_mask1, 0., 1.)
+        depth0 = np.clip(depth0, 0., 1.)
+        depth1 = np.clip(depth1, 0., 1.)
+        depth1_only0 = np.clip(depth1_only0, 0., 1.)
+        depth1_only1 = np.clip(depth1_only1, 0., 1.)
+        gen_image1 = np.clip(gen_image1, 0., 1.)
+        gen_image1_only0 = np.clip(gen_image1_only0, 0., 1.)
+        gen_image1_only1 = np.clip(gen_image1_only1, 0., 1.)
+        gen_image1_mask0 = np.clip(gen_image1_mask0, 0., 1.)
+        gen_image1_mask1 = np.clip(gen_image1_mask1, 0., 1.)
+        gen_depth1 = np.clip(gen_depth1, 0., 1.)
+        gen_depth1_only0 = np.clip(gen_depth1_only0, 0., 1.)
+        gen_depth1_only1 = np.clip(gen_depth1_only1, 0., 1.)
+
+        dict={}
+        dict['image0'] = image0
+        dict['image0_mask0'] = image0_mask0
+        dict['image0_mask1'] = image0_mask1
+        dict['image1'] = image1
+        dict['image1_only0'] = image1_only0
+        dict['image1_only1'] = image1_only1
+        dict['image1_mask0'] = image1_mask0
+        dict['image1_mask1'] = image1_mask1
+        dict['depth0'] = depth0
+        dict['depth1'] = depth1
+        dict['depth1_only0'] = depth1_only0
+        dict['depth1_only1'] = depth1_only1
+        dict['gen_image1'] = gen_image1
+        dict['gen_image1_only0'] = gen_image1_only0
+        dict['gen_image1_only1'] = gen_image1_only1
+        dict['gen_image1_mask0'] = gen_image1_mask0
+        dict['gen_image1_mask1'] = gen_image1_mask1
+        dict['gen_depth1'] = gen_depth1
+        dict['gen_depth1_only0'] = gen_depth1_only0
+        dict['gen_depth1_only1'] = gen_depth1_only1
+
+        write_to_file = True
+        if write_to_file:
+            file = self.conf['output_dir'] +'/imgdata.pkl'
+            cPickle.dump(dict, open(file, 'wb'))
+            print 'written to file', file
+            return
+
+        for b in range(self.batch_size):
             print 'input', b
             fig1 = plt.figure()
 
@@ -339,26 +390,27 @@ class Base_Prediction_Model():
             plt.imshow(image1[b])
             plt.axis('off')
 
-            plt.subplot(3, 3, 5)
-            plt.imshow(image1_only0[b])
-            plt.axis('off')
-
-            plt.subplot(3, 3, 6)
-            plt.imshow(image1_only1[b])
-            plt.axis('off')
-
             if 'combination_image' in self.conf:
                 plt.subplot(3, 3, 7)
                 plt.imshow(gen_image1[b])
                 plt.axis('off')
 
-            plt.subplot(3, 3, 8)
-            plt.imshow(gen_image1_only0[b])
-            plt.axis('off')
+            if 'gen_sep_images' in self.conf:
+                plt.subplot(3, 3, 5)
+                plt.imshow(image1_only0[b])
+                plt.axis('off')
 
-            plt.subplot(3, 3, 9)
-            plt.imshow(gen_image1_only1[b])
-            plt.axis('off')
+                plt.subplot(3, 3, 6)
+                plt.imshow(image1_only1[b])
+                plt.axis('off')
+
+                plt.subplot(3, 3, 8)
+                plt.imshow(gen_image1_only0[b])
+                plt.axis('off')
+
+                plt.subplot(3, 3, 9)
+                plt.imshow(gen_image1_only1[b])
+                plt.axis('off')
 
             plt.draw()
             fig2 = plt.figure()
@@ -372,26 +424,27 @@ class Base_Prediction_Model():
             plt.imshow(np.squeeze(depth1[b]))
             plt.axis('off')
 
-            plt.subplot(3, 3, 5)
-            plt.imshow(np.squeeze(depth1_only0[b]))
-            plt.axis('off')
-
-            plt.subplot(3, 3, 6)
-            plt.imshow(np.squeeze(depth1_only1[b]))
-            plt.axis('off')
-
             if 'combination_image' in self.conf:
                 plt.subplot(3, 3, 7)
                 plt.imshow(np.squeeze(gen_depth1[b]))
                 plt.axis('off')
 
-            plt.subplot(3, 3, 8)
-            plt.imshow(np.squeeze(gen_depth1_only0[b]))
-            plt.axis('off')
+            if 'gen_sep_images' in self.conf:
+                plt.subplot(3, 3, 5)
+                plt.imshow(np.squeeze(depth1_only0[b]))
+                plt.axis('off')
 
-            plt.subplot(3, 3, 9)
-            plt.imshow(np.squeeze(gen_depth1_only1[b]))
-            plt.axis('off')
+                plt.subplot(3, 3, 6)
+                plt.imshow(np.squeeze(depth1_only1[b]))
+                plt.axis('off')
+
+                plt.subplot(3, 3, 8)
+                plt.imshow(np.squeeze(gen_depth1_only0[b]))
+                plt.axis('off')
+
+                plt.subplot(3, 3, 9)
+                plt.imshow(np.squeeze(gen_depth1_only1[b]))
+                plt.axis('off')
 
             plt.draw()
 
@@ -424,11 +477,11 @@ class Base_Prediction_Model():
 
             if 'predict_target_masks' in self.conf:
                 plt.subplot(rows, 4, 7)
-                plt.imshow(np.squeeze(image1_mask0[b]))
+                plt.imshow(np.squeeze(gen_image1_mask0[b]))
                 plt.axis('off')
 
                 plt.subplot(rows, 4, 8)
-                plt.imshow(np.squeeze(image1_mask1[b]))
+                plt.imshow(np.squeeze(gen_image1_mask1[b]))
                 plt.axis('off')
 
             save_images = True
@@ -438,6 +491,7 @@ class Base_Prediction_Model():
                 fig3.savefig(self.conf['output_dir'] + '/masks_exp{}'.format(b))
             else:
                 plt.show()
+            plt.close()
 
         iter_num = re.match('.*?([0-9]+)$', self.conf['visualize']).group(1)
 
