@@ -22,6 +22,9 @@ def euclidean_loss(input1, input2):
 def l1_loss(input1, input2):
     return tf.reduce_mean(tf.reduce_sum(tf.abs(tf.subtract(input1, input2)), 3))
 
+def relu(x, name="relu"):
+    with tf.variable_scope(name):
+        return 0.5 * x + 0.5 * abs(x)
 
 def lrelu(x, leak=0.2, name="lrelu"):
     with tf.variable_scope(name):
@@ -29,6 +32,24 @@ def lrelu(x, leak=0.2, name="lrelu"):
         f2 = 0.5 * (1 - leak)
         return f1 * x + f2 * abs(x)
 
+def warp_pts_layer(flow_field, name="warp_pts"):
+    with tf.variable_scope(name):
+        img_shape = tf.shape(flow_field)
+        return flow_field + coords(img_shape[1], img_shape[2], img_shape[0])
+
+def resample_layer(src_img, warp_pts, name="tgt_img"):
+    with tf.variable_scope(name):
+        return tf.contrib.resampler.resampler(src_img, warp_pts)
+
+def coords(h, w, batch_size):
+    y = tf.cast(tf.range(h), tf.float32)
+    x = tf.cast(tf.range(w), tf.float32)
+
+    X,Y = tf.meshgrid(x,y)
+    partial_tile_shape = tf.constant([1,1,1])
+    tile_shape = tf.concat([tf.reshape(batch_size, [-1]), partial_tile_shape], 0)
+    coords = tf.tile(tf.expand_dims(tf.stack((Y,X), axis=2), axis=0), tile_shape)
+    return coords
 
 def linear_msra(input_, output_size, name):
     msra_coeff = 1.0
