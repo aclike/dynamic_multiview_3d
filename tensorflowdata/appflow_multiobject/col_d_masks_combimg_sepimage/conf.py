@@ -10,7 +10,7 @@ from multiobject_appflow import MultiObjectAppFlow
 
 # tf record data location:
 import dyn_mult_view
-DATA_DIR = '/home/febert/Documents/courses/dynamic_multiview_3d/trainingdata/multicardataset/train'
+DATA_DIR = '/'.join(str.split(dyn_mult_view.__file__, '/')[:-2]) + '/trainingdata/multicardataset/train'
 
 configuration = {
 'model':MultiObjectAppFlow,

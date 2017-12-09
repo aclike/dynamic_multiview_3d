@@ -395,6 +395,8 @@ class MultiObjectAppFlow():
             print 'written to file', file
             return
 
+        iter_num = re.match('.*?([0-9]+)$', self.conf['visualize']).group(1)
+
         for b in range(self.batch_size):
             print 'input', b
             fig1 = plt.figure()
@@ -503,14 +505,40 @@ class MultiObjectAppFlow():
 
             save_images = True
             if save_images:
-                fig1.savefig(self.conf['output_dir']+'/img_exp{}'.format(b))
-                fig2.savefig(self.conf['output_dir'] + '/depth_exp{}'.format(b))
-                fig3.savefig(self.conf['output_dir'] + '/masks_exp{}'.format(b))
+                fig1.savefig(self.conf['output_dir']+'/img_exp_iter{}_{}'.format(iter_num,b))
+                fig2.savefig(self.conf['output_dir'] + '/depth_exp_iter{}_{}'.format(iter_num,b))
+                fig3.savefig(self.conf['output_dir'] + '/masks_exp_iter{}_{}'.format(iter_num,b))
             else:
                 plt.show()
-            plt.close()
+            plt.close(fig1)
+            plt.close(fig2)
+            plt.close(fig3)
 
-        iter_num = re.match('.*?([0-9]+)$', self.conf['visualize']).group(1)
+            plt.figure()
+            ax1 = plt.subplot(121)
+            ax2 = plt.subplot(122)
+            ax1.imshow(image0[0])
+            ax2.imshow(gen[0])
+
+            coordsA = "data"
+            coordsB = "data"
+            # random pts 
+            num_samples = 6
+            pts_output = np.random.randint(40, 88, size=(num_samples,2))
+            for pt_output in pts_output:
+                sampled_location = warp_pts[0,pt_output[0],pt_output[1],:].astype('uint32')
+                print pt_output, sampled_location
+                con = ConnectionPatch(xyA=np.flip(pt_output,0), xyB=np.flip(sampled_location,0), coordsA=coordsA, coordsB=coordsB,
+                             axesA=ax2, axesB=ax1,
+                             arrowstyle="<->",shrinkB=5, color='c')
+                ax2.add_artist(con)
+            ax1.set_xlim(0, 128)
+            ax1.set_ylim(0, 128)
+            ax2.set_xlim(0, 128)
+            ax2.set_ylim(0, 128)
+            plt.draw()
+            plt.savefig(path + '/corr_plot_iter{}_{}.pdf'.format(iter_num,b))
+            plt.close()
 
         return
 

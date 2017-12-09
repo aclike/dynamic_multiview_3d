@@ -163,7 +163,7 @@ class AppearanceFlowModel():
         coordsB = "data"
         # random pts 
         num_samples = 6
-        pts_output = np.random.randint(50, 78, size=(num_samples,2))
+        pts_output = np.random.randint(40, 88, size=(num_samples,2))
         for pt_output in pts_output:
             sampled_location = warp_pts[0,pt_output[0],pt_output[1],:].astype('uint32')
             print pt_output, sampled_location
